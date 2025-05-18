@@ -4,7 +4,9 @@ Controller for a boat light which indicates port and starboard.
 
 ## Description
 
-Controller for a boat light which indicates port and starboard. 
+BoatLight is an LED ring system designed to indicate the port (red) and starboard (green) sides of a boat. It supports eight user-selectable modes, which can be toggled using a physical button. The currently selected mode is saved to persistent storage, so it resumes automatically after a power cycle.
+
+The device is solar-powered. It monitors the voltage from a connected solar panel to determine whether it should be active or idle. When the solar panel voltage drops below 2.35V, the device activates. When the voltage rises above 2.35V, the device enters an idle state to conserve power.
 
 ## Getting Started
 

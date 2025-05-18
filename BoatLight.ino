@@ -29,6 +29,7 @@ const uint16_t sosGap = 1000;
 uint8_t currentMode = 0;
 uint8_t sosIndex = 0;
 unsigned long sosLastTime = 0;
+unsigned long lastStepTime = 0;
 bool sosRunning = false;
 uint8_t fadeBrightness = 0;
 
@@ -141,7 +142,6 @@ void setAllWhite(uint8_t brightness) {
 }
 
 void updateSos() {
-  static unsigned long lastStepTime = 0;
   static bool paused = false;
   static unsigned long pauseStart = 0;
 
