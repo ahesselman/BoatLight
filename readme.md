@@ -31,7 +31,7 @@ To allow the system to operate while charging and prevent the battery from suppl
 
 3. Voltage monitoring
 
-A voltage divider is used to monitor the solar panel voltage. This allows the ATTiny85 to detect when the solar voltage drops below 2.35 and activate the LEDs accordingly.
+A voltage divider is used to monitor the solar panel voltage. This allows the ATTiny85 to detect when the solar voltage drops below 2.35 and activate the LEDs accordingly. To improve stability and prevent unwanted rapid switching, hysterisis is applied. 
 
 ### Control circuit
 
