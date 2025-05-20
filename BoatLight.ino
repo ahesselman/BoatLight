@@ -6,6 +6,7 @@
 #define LED_PIN       0   // PB0
 #define BUTTON_PIN    1   // PB1
 #define VOLTAGE_PIN   A1  // PB2
+#define SWITCH_PIN    3   // PB3
 #define NUM_LEDS      16
 #define NUM_MODES     9
 #define VOLTAGE_THRESHOLD 2.35
