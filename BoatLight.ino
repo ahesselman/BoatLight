@@ -5,7 +5,7 @@
 #include <avr/wdt.h>
 
 #define DEBUG
-#define WOKWI
+#define WOKWI   // Uncomment this when testing on Wokwi simulator
 
 #define LED_PIN               0   // PB0
 #define BUTTON_PIN            1   // PB1
@@ -14,12 +14,14 @@
 
 #define NUM_LEDS      16
 #define NUM_MODES     9
-#define SLEEP_CYCLES  7   // Each Cycle is eight seconds, ~ 56 seconds
-#define VOLTAGE_LOWER_THRESHOLD 2.35
-#define VOLTAGE_UPPER_THRESHOLD 2.45
+#define SLEEP_CYCLES  7   // Sleep duration when idle (7 x 8 sec = ~ 56 sec)
+#define VOLTAGE_LOWER_THRESHOLD 2.35  // Threshold LEDs on
+#define VOLTAGE_UPPER_THRESHOLD 2.45  // Threshold LEDs off
 
+// State machine for SOS fading behavior
 enum class SosState { IDLE, FADING_IN, ON, FADING_OUT, OFF };
 
+// Available light modes
 enum LightMode {
   GREEN = 0,
   RED,
@@ -40,7 +42,8 @@ enum LightMode {
 Bounce2::Button modeButton = Bounce2::Button();
 SosState sosState = SosState::IDLE;
 
-// SOS pattern in ms
+// --- SOS Pattern ---
+// Timing for SOS Morse pattern (in milliseconds)
 const uint16_t sosPattern[] PROGMEM = {
   250,250,250,  // ...
   750,750,750,  // ---
@@ -53,28 +56,30 @@ const uint16_t sosPattern[] PROGMEM = {
 const uint8_t fadeStep = 15;
 const uint8_t sosPause = 250;
 const uint16_t sosGap = 1500;
-const unsigned long saveDelay = 2000;
-const float r1 = 10000.0;
-const float r2 = 10000.0;
-const float referenceVoltage = 5.0;
-constexpr float dividerFactor = referenceVoltage / 1023.0;
+const unsigned long saveDelay = 2000; // EEPROM write delay, in ms
+const float r1 = 10000.0;             // Voltage divider resistor 1 value, in Ohm
+const float r2 = 10000.0;             // Voltage divider resistor 1 value, in Ohm
+constexpr float referenceVoltage = 5.0;
+constexpr float dividerFactor = referenceVoltage / 1023.0;  // ADC scale factor
 
 // Globals
-bool outputState = false;
-bool sosRunning = false;
-bool cycleEnd = false;
-uint8_t lastSavedMode = 255;
-uint8_t currentMode = LightMode::OFF_MODE;
-uint8_t sosIndex = 0;
+bool outputState = false;                   // Whether LEDs are powered
+bool sosRunning = false;                    // Whether SOS is active
+bool cycleEnd = false;                      // End of SOS cycle
+uint8_t lastSavedMode = 255;                // Previously saved mode
+uint8_t currentMode = LightMode::OFF_MODE;  
+uint8_t sosIndex = 0;                       // Current SOS pattern step
 uint8_t fadeBrightness = 0;
 unsigned long sosLastTime = 0;
 unsigned long lastModeChangeTime = 0;
 
+// ----- Arduino setup -----
 void setup() {
   initiateStrip();
   initiateModeButton();
   readAndSanitizeCurrentMode();
 }
+
 
 void loop() {
   handleModeButtonPress();
@@ -83,10 +88,11 @@ void loop() {
   #ifndef DEBUG
     performVoltageRead();
   #else
-    applyCurrentMode(currentMode);
+    applyCurrentMode(currentMode); // Skip voltage check when in debug mode
   #endif
 }
 
+// ----- Initialization functions -----
 void initiateStrip() {
   strip.begin();
   strip.clear();
@@ -107,6 +113,7 @@ void readAndSanitizeCurrentMode() {
   if (currentMode >= NUM_MODES) currentMode = LightMode::GREEN;
 }
 
+// ----- Button and EEPROM Handling
 void handleModeButtonPress() {
   modeButton.update();
 
@@ -123,6 +130,7 @@ void storeCurrentMode() {
   }
 }
 
+// ----- Voltage Monitoring and Power Control
 void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
@@ -153,6 +161,7 @@ float readSolarVoltage() {
   return solarVoltage;  
 }
 
+// ----- LED Mode control -----
 void applyCurrentMode(uint8_t mode) {
     if (mode != LightMode::OFF_MODE) {
       digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
@@ -238,30 +247,27 @@ void applyCurrentMode(uint8_t mode) {
   }
 }
 
+// ----- LED color helper -----
+// --- LED Color Helper ---
 #ifndef WOKWI
-  void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset) {
-    if (reset) {
-      strip.clear();
-      strip.setBrightness(255);
-    } 
-    
-    for (int i = start; i <= end; i++) {
-      strip.setPixelColor(i, strip.Color(r, g, b, w));
-    }
-  }
+void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset) {
 #else
-  void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, bool reset) {
-    if (reset) {
-      strip.clear();
-      strip.setBrightness(255);
-    } 
-
-    for (int i = start; i <= end; i++) {
-      strip.setPixelColor(i, strip.Color(r, g, b));
-    }
-  }
+void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, bool reset) {
 #endif
+  if (reset) {
+    strip.clear();
+    strip.setBrightness(255);
+  }
+  for (int i = start; i <= end; i++) {
+    #ifndef WOKWI
+      strip.setPixelColor(i, strip.Color(r, g, b, w));
+    #else
+      strip.setPixelColor(i, strip.Color(r, g, b));
+    #endif
+  }
+}
 
+// --- All-white Helper for SOS ---
 void setAllWhite(uint8_t brightness) {
   strip.setBrightness(brightness);
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -344,13 +350,14 @@ void handleSosAnimation() {
   }
 }
 
-// This function is called when the watchdog timer expires. 
+// --- Watchdog Timer ISR ---
+// Wakes the device up from sleep when WDT expires
 ISR(WDT_vect) {
-  wdt_disable();                  // Disable watchdog timer after wake-up    
+  wdt_disable();  // Disable WDT after wake-up  
 }
 
-// This function puts the ATTINY in sleep mode.
-// To save power, the ADCs (Analog-to-Digital Converter) are explicitly shutdown.
+// --- Sleep Handler ---
+// Puts device to deep sleep for power saving
 void shutDownWithWD(const byte time_len) {
   noInterrupts();                 // Disables interrupts temporarily
   wdt_reset();                    // Resets the watchdog
