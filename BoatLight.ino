@@ -7,10 +7,10 @@
 #define DEBUG
 #define WOKWI
 
-#define LED_PIN       0   // PB0
-#define BUTTON_PIN    1   // PB1
-#define VOLTAGE_PIN   A1  // PB2
-#define SWITCH_PIN    3   // PB3
+#define LED_PIN               0   // PB0
+#define BUTTON_PIN            1   // PB1
+#define VOLTAGE_PIN           A1  // PB2
+#define LED_POWER_SWITCH_PIN  3   // PB3
 
 #define NUM_LEDS      16
 #define NUM_MODES     9
@@ -19,6 +19,18 @@
 #define VOLTAGE_UPPER_THRESHOLD 2.45
 
 enum class SosState { IDLE, FADING_IN, ON, FADING_OUT, OFF };
+
+enum LightMode {
+  GREEN = 0,
+  RED,
+  GREEN_RED,
+  WHITE_1_10,
+  WHITE_11_16,
+  FULL_COMBO,
+  ALL_WHITE,
+  SOS,
+  OFF_MODE
+};
 
 #ifndef WOKWI
   Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
@@ -41,19 +53,22 @@ const uint16_t sosPattern[] PROGMEM = {
 const uint8_t fadeStep = 15;
 const uint8_t sosPause = 250;
 const uint16_t sosGap = 1500;
+const unsigned long saveDelay = 2000;
 const float r1 = 10000.0;
 const float r2 = 10000.0;
 const float referenceVoltage = 5.0;
-const float dividerFactor = referenceVoltage / 1023.0;
+constexpr float dividerFactor = referenceVoltage / 1023.0;
 
 // Globals
 bool outputState = false;
 bool sosRunning = false;
 bool cycleEnd = false;
-uint8_t currentMode = 0;
+uint8_t lastSavedMode = 255;
+uint8_t currentMode = LightMode::OFF_MODE;
 uint8_t sosIndex = 0;
 uint8_t fadeBrightness = 0;
 unsigned long sosLastTime = 0;
+unsigned long lastModeChangeTime = 0;
 
 void setup() {
   initiateStrip();
@@ -62,7 +77,9 @@ void setup() {
 }
 
 void loop() {
-  handleModeButtonPress();  
+  handleModeButtonPress();
+  storeCurrentMode();
+
   #ifndef DEBUG
     performVoltageRead();
   #else
@@ -74,6 +91,9 @@ void initiateStrip() {
   strip.begin();
   strip.clear();
   strip.show();
+
+  pinMode(LED_POWER_SWITCH_PIN, OUTPUT);
+  digitalWrite(LED_POWER_SWITCH_PIN, LOW);
 }
 
 void initiateModeButton() {
@@ -84,16 +104,22 @@ void initiateModeButton() {
 
 void readAndSanitizeCurrentMode() {
   currentMode = EEPROM.read(0);
-
-  if (currentMode >= NUM_MODES) currentMode = 0;
+  if (currentMode >= NUM_MODES) currentMode = LightMode::GREEN;
 }
 
 void handleModeButtonPress() {
   modeButton.update();
 
-  if (modeButton.pressed()) {
+  if (modeButton.fell()) {
     currentMode = (currentMode + 1) % NUM_MODES;
+    lastModeChangeTime  = millis();
+  }
+}
+
+void storeCurrentMode() {
+  if (currentMode != lastSavedMode && millis() - lastModeChangeTime > saveDelay) {    
     EEPROM.update(0, currentMode);
+    lastSavedMode = currentMode;
   }
 }
 
@@ -101,14 +127,19 @@ void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
   if (!outputState && solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
-    applyCurrentMode(currentMode);
     outputState = true;
+    digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+    applyCurrentMode(currentMode);
   } else if (outputState && solarVoltage > VOLTAGE_UPPER_THRESHOLD) {
+    outputState = false;
+
     strip.clear();
-    strip.show();
+    strip.show(); 
+
+    digitalWrite(LED_POWER_SWITCH_PIN, LOW);
+
     for (int j=0; j < SLEEP_CYCLES; j++) { 
       shutDownWithWD (0b100001);  // 8 seconds
-      delay(50);
     }
   }
 }
@@ -123,40 +154,51 @@ float readSolarVoltage() {
 }
 
 void applyCurrentMode(uint8_t mode) {
+    if (mode != LightMode::OFF_MODE) {
+      digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+    } else {
+      digitalWrite(LED_POWER_SWITCH_PIN, LOW);
+    }
+
   switch (mode) {
-    case 0: // LED 6–10 green
+    case LightMode::GREEN: // LED 6–10 green
       #ifndef WOKWI
-        colorLedsInRange(5, 9, 0, 255, 0, 0, true); break;
+        colorLedsInRange(5, 9, 0, 255, 0, 0, true);
       #else
-        colorLedsInRange(5, 9, 0, 255, 0, true); break;
-      #endif      
-    case 1: // LED 1–5 red
-      #ifndef WOKWI
-        colorLedsInRange(0, 4, 255, 0, 0, 0, true); break;
-      #else
-        colorLedsInRange(0, 4, 255, 0, 0, true); break;
-      #endif      
-    case 2:  // LED 1–5 red, 6–10 green
+        colorLedsInRange(5, 9, 0, 255, 0, true);
+      #endif
+      break;
+    case LightMode::RED: // LED 1–5 red
       #ifndef WOKWI
         colorLedsInRange(0, 4, 255, 0, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, 0, false); break;
       #else
         colorLedsInRange(0, 4, 255, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, false); break;
+      #endif      
+      break;
+    case LightMode::GREEN_RED:  // LED 1–5 red, 6–10 green
+      #ifndef WOKWI
+        colorLedsInRange(0, 4, 255, 0, 0, 0, true);
+        colorLedsInRange(5, 9, 0, 255, 0, 0, false);
+      #else
+        colorLedsInRange(0, 4, 255, 0, 0, true);
+        colorLedsInRange(5, 9, 0, 255, 0, false);
       #endif
-    case 3: // LED 1–10 white
+      break;
+    case LightMode::WHITE_1_10: // LED 1–10 white
       #ifndef WOKWI
-        colorLedsInRange(0, 9, 0, 0, 0, 255, true); break;
+        colorLedsInRange(0, 9, 0, 0, 0, 255, true);
       #else
-        colorLedsInRange(0, 9, 255, 255, 255, true); break;
-      #endif      
-    case 4: // LED 11–16 white
+        colorLedsInRange(0, 9, 255, 255, 255, true);
+      #endif
+      break;
+    case LightMode::WHITE_11_16: // LED 11–16 white
       #ifndef WOKWI
-        colorLedsInRange(10, 15, 0, 0, 0, 255, true); break;
+        colorLedsInRange(10, 15, 0, 0, 0, 255, true);
       #else
-        colorLedsInRange(10, 15, 255, 255, 255, true); break;
-      #endif      
-    case 5: // 1–5 red, 6–10 green, 11–16 white
+        colorLedsInRange(10, 15, 255, 255, 255, true);
+      #endif
+      break;
+    case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
       #ifndef WOKWI
         colorLedsInRange(0, 4, 255, 0, 0, 0, true);
         colorLedsInRange(5, 9, 0, 255, 0, 0, false);
@@ -164,16 +206,17 @@ void applyCurrentMode(uint8_t mode) {
       #else
         colorLedsInRange(0, 4, 255, 0, 0, true);
         colorLedsInRange(5, 9, 0, 255, 0, false);
-        colorLedsInRange(10, 15, 255, 255, 255, false);
+        colorLedsInRange(10, 15, 255, 255, 255, false);        
       #endif
       break;
-    case 6: // All white
+    case LightMode::ALL_WHITE: // All white
       #ifndef WOKWI
-        colorLedsInRange(0, 15, 0, 0, 0, 255, true); break;
+        colorLedsInRange(0, 15, 0, 0, 0, 255, true);
       #else
-        colorLedsInRange(0, 15, 255, 255, 255, true); break;
-      #endif      
-    case 7: // SOS
+        colorLedsInRange(0, 15, 255, 255, 255, true);
+      #endif
+      break;
+    case LightMode::SOS: // SOS
       if (!sosRunning) {
         sosIndex = 0;
         sosState = SosState::FADING_IN;
@@ -183,14 +226,14 @@ void applyCurrentMode(uint8_t mode) {
       }
       handleSosAnimation();
       break;
-    case 8: 
+    case LightMode::OFF_MODE: 
     default: // All off
       strip.clear();
       sosRunning = false;
       break;
   }
 
-  if (currentMode != 7) {
+  if (mode != LightMode::SOS) {
     strip.show();
   }
 }
@@ -245,7 +288,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness < 255) {
-          fadeBrightness += fadeStep;
+          fadeBrightness += fadeStep;          
           setAllWhite(fadeBrightness);
         } else {
           sosState = SosState::ON;
@@ -265,7 +308,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness > 0) {
-          fadeBrightness -= fadeStep;
+          fadeBrightness -= fadeStep;          
           setAllWhite(fadeBrightness);
         } else {
           strip.clear();
@@ -284,14 +327,14 @@ void handleSosAnimation() {
 
     case SosState::OFF:
       if (now - sosLastTime >= (cycleEnd ? sosGap : sosPause)) {
-        lastStepTime = now;
+        lastStepTime = now;          
         if (!paused) {
           paused = true;
         } else {
           paused = false;
           cycleEnd = false;
           sosState = SosState::FADING_IN;
-          fadeBrightness = 0;
+          fadeBrightness = 0;          
         }
       }
       break;
@@ -303,7 +346,7 @@ void handleSosAnimation() {
 
 // This function is called when the watchdog timer expires. 
 ISR(WDT_vect) {
-  wdt_disable();                  // Disable watchdog timer after wake-up
+  wdt_disable();                  // Disable watchdog timer after wake-up    
 }
 
 // This function puts the ATTINY in sleep mode.
