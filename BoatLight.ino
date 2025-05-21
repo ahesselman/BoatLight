@@ -80,7 +80,7 @@ void setup() {
   readAndSanitizeCurrentMode();
 }
 
-
+// ----- Arduino loop -----
 void loop() {
   handleModeButtonPress();
   storeCurrentMode();
@@ -113,7 +113,7 @@ void readAndSanitizeCurrentMode() {
   if (currentMode >= NUM_MODES) currentMode = LightMode::GREEN;
 }
 
-// ----- Button and EEPROM Handling
+// ----- Button and EEPROM Handling -----
 void handleModeButtonPress() {
   modeButton.update();
 
@@ -130,7 +130,7 @@ void storeCurrentMode() {
   }
 }
 
-// ----- Voltage Monitoring and Power Control
+// ----- Voltage Monitoring and Power Control -----
 void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
@@ -248,7 +248,6 @@ void applyCurrentMode(uint8_t mode) {
 }
 
 // ----- LED color helper -----
-// --- LED Color Helper ---
 #ifndef WOKWI
 void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset) {
 #else
@@ -267,7 +266,7 @@ void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t 
   }
 }
 
-// --- All-white Helper for SOS ---
+// ----- All-white Helper for SOS -----
 void setAllWhite(uint8_t brightness) {
   strip.setBrightness(brightness);
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -280,6 +279,7 @@ void setAllWhite(uint8_t brightness) {
   strip.show();
 }
 
+// ----- SOS Blinking Animation Handler -----
 void handleSosAnimation() {
   static unsigned long lastStepTime = 0;
   static bool paused = false;
@@ -350,13 +350,13 @@ void handleSosAnimation() {
   }
 }
 
-// --- Watchdog Timer ISR ---
+// ----- Watchdog Timer ISR -----
 // Wakes the device up from sleep when WDT expires
 ISR(WDT_vect) {
   wdt_disable();  // Disable WDT after wake-up  
 }
 
-// --- Sleep Handler ---
+// ----- Sleep Handler -----
 // Puts device to deep sleep for power saving
 void shutDownWithWD(const byte time_len) {
   noInterrupts();                 // Disables interrupts temporarily
