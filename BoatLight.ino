@@ -10,6 +10,8 @@
 #define LED_PIN       0   // PB0
 #define BUTTON_PIN    1   // PB1
 #define VOLTAGE_PIN   A1  // PB2
+#define SWITCH_PIN    3   // PB3
+
 #define NUM_LEDS      16
 #define NUM_MODES     9
 #define SLEEP_CYCLES  7   // Each Cycle is eight seconds, ~ 56 seconds
@@ -33,12 +35,16 @@ const uint16_t sosPattern[] PROGMEM = {
   250,250,250   // ...
 };
 
+#define SOS_PATTERN_LENGTH (sizeof(sosPattern) / sizeof(sosPattern[0]))
+
 // Constants
+const uint8_t fadeStep = 15;
 const uint8_t sosPause = 250;
 const uint16_t sosGap = 1500;
 const float r1 = 10000.0;
 const float r2 = 10000.0;
 const float referenceVoltage = 5.0;
+const float dividerFactor = referenceVoltage / 1023.0;
 
 // Globals
 bool outputState = false;
@@ -72,7 +78,7 @@ void initiateStrip() {
 
 void initiateModeButton() {
   modeButton.attach(BUTTON_PIN, INPUT_PULLUP);
-  modeButton.interval(5);
+  modeButton.interval(25);
   modeButton.setPressedState(LOW); 
 }
 
@@ -101,7 +107,7 @@ void performVoltageRead() {
     strip.clear();
     strip.show();
     for (int j=0; j < SLEEP_CYCLES; j++) { 
-      shutDown_with_WD (0b100001);  // 8 seconds
+      shutDownWithWD (0b100001);  // 8 seconds
       delay(50);
     }
   }
@@ -110,7 +116,7 @@ void performVoltageRead() {
 float readSolarVoltage() {
   int rawVoltage = analogRead(VOLTAGE_PIN);
   
-  float voltageAtPin = rawVoltage * (referenceVoltage / 1023.0);
+  float voltageAtPin = rawVoltage * dividerFactor;
   float solarVoltage = voltageAtPin * ((r1 + r2) / r2);
 
   return solarVoltage;  
@@ -123,7 +129,7 @@ void applyCurrentMode(uint8_t mode) {
         colorLedsInRange(5, 9, 0, 255, 0, 0, true); break;
       #else
         colorLedsInRange(5, 9, 0, 255, 0, true); break;
-      #endif
+      #endif      
     case 1: // LED 1–5 red
       #ifndef WOKWI
         colorLedsInRange(0, 4, 255, 0, 0, 0, true); break;
@@ -158,7 +164,7 @@ void applyCurrentMode(uint8_t mode) {
       #else
         colorLedsInRange(0, 4, 255, 0, 0, true);
         colorLedsInRange(5, 9, 0, 255, 0, false);
-        colorLedsInRange(10, 15, 255, 255, 255, false);        
+        colorLedsInRange(10, 15, 255, 255, 255, false);
       #endif
       break;
     case 6: // All white
@@ -175,17 +181,16 @@ void applyCurrentMode(uint8_t mode) {
         fadeBrightness = 0;
         sosRunning = true;
       }
+      handleSosAnimation();
       break;
     case 8: 
     default: // All off
-      strip.clear();  strip.show();
+      strip.clear();
       sosRunning = false;
       break;
   }
 
-  if (currentMode == 7) {
-    handleSosAnimation();
-  } else {
+  if (currentMode != 7) {
     strip.show();
   }
 }
@@ -240,7 +245,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness < 255) {
-          fadeBrightness += 15;          
+          fadeBrightness += fadeStep;
           setAllWhite(fadeBrightness);
         } else {
           sosState = SosState::ON;
@@ -260,7 +265,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness > 0) {
-          fadeBrightness -= 15;          
+          fadeBrightness -= fadeStep;
           setAllWhite(fadeBrightness);
         } else {
           strip.clear();
@@ -269,7 +274,7 @@ void handleSosAnimation() {
           sosLastTime = now;
 
           sosIndex++;
-          if (sosIndex >= sizeof(sosPattern) / sizeof(sosPattern[0])) {
+          if (sosIndex >= SOS_PATTERN_LENGTH) {
             sosIndex = 0;
             cycleEnd = true;
           }          
@@ -279,14 +284,14 @@ void handleSosAnimation() {
 
     case SosState::OFF:
       if (now - sosLastTime >= (cycleEnd ? sosGap : sosPause)) {
-        lastStepTime = now;          
+        lastStepTime = now;
         if (!paused) {
           paused = true;
         } else {
           paused = false;
           cycleEnd = false;
           sosState = SosState::FADING_IN;
-          fadeBrightness = 0;          
+          fadeBrightness = 0;
         }
       }
       break;
@@ -298,12 +303,12 @@ void handleSosAnimation() {
 
 // This function is called when the watchdog timer expires. 
 ISR(WDT_vect) {
-  wdt_disable();                  // Disable watchdog timer after wake-up    
+  wdt_disable();                  // Disable watchdog timer after wake-up
 }
 
 // This function puts the ATTINY in sleep mode.
 // To save power, the ADCs (Analog-to-Digital Converter) are explicitly shutdown.
-void shutDown_with_WD(const byte time_len) {
+void shutDownWithWD(const byte time_len) {
   noInterrupts();                 // Disables interrupts temporarily
   wdt_reset();                    // Resets the watchdog
    
