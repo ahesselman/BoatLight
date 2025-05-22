@@ -72,6 +72,7 @@ uint8_t sosIndex = 0;                       // Current SOS pattern step
 uint8_t fadeBrightness = 0;
 unsigned long sosLastTime = 0;
 unsigned long lastModeChangeTime = 0;
+unsigned long pressStartTime = 0;
 
 // ----- Arduino setup -----
 void setup() {
@@ -118,8 +119,21 @@ void handleModeButtonPress() {
   modeButton.update();
 
   if (modeButton.fell()) {
-    currentMode = (currentMode + 1) % NUM_MODES;
-    lastModeChangeTime  = millis();
+    pressStartTime = millis();  // record press time
+  }
+
+  if (modeButton.rose()) {
+    unsigned long pressDuration = millis() - pressStartTime;
+    
+    if (pressDuration >= 1000) {
+      // Long press: jump to OFF MODE
+      currentMode = LightMode::OFF_MODE;
+    } else {
+      // Short press: next mode
+      currentMode = (currentMode + 1) % NUM_MODES;
+    }
+
+    lastModeChangeTime = millis(); // update for EEPROM saving
   }
 }
 
