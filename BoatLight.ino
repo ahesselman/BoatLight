@@ -4,8 +4,8 @@
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
-#define DEBUG
-#define WOKWI   // Uncomment this when testing on Wokwi simulator
+//#define DEBUG
+//#define WOKWI   // Comment this when testing on Wokwi simulator
 
 #define LED_PIN               0   // PB0
 #define BUTTON_PIN            1   // PB1
