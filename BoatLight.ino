@@ -134,8 +134,9 @@ void storeCurrentMode() {
 void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
-  if (!outputState && solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
-    outputState = true;
+  if (solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
+    if (!outputState)
+      outputState = true;
     digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
     applyCurrentMode(currentMode);
   } else if (outputState && solarVoltage > VOLTAGE_UPPER_THRESHOLD) {
