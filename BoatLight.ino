@@ -4,6 +4,10 @@
 #include <avr/sleep.h>
 #include <avr/wdt.h>
 
+#ifdef __AVR__
+ #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+
 //#define DEBUG
 //#define WOKWI   // Comment this when testing on Wokwi simulator
 
@@ -15,8 +19,8 @@
 #define NUM_LEDS      16
 #define NUM_MODES     9
 #define SLEEP_CYCLES  7   // Sleep duration when idle (7 x 8 sec = ~ 56 sec)
-#define VOLTAGE_LOWER_THRESHOLD 2.35  // Threshold LEDs on
-#define VOLTAGE_UPPER_THRESHOLD 2.45  // Threshold LEDs off
+#define VOLTAGE_LOWER_THRESHOLD 3.50  // Threshold LEDs on
+#define VOLTAGE_UPPER_THRESHOLD 4.50  // Threshold LEDs off
 
 // State machine for SOS fading behavior
 enum class SosState { IDLE, FADING_IN, ON, FADING_OUT, OFF };
@@ -76,6 +80,12 @@ unsigned long pressStartTime = 0;
 
 // ----- Arduino setup -----
 void setup() {
+  // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
+  // Any other board, you can remove this part (but no harm leaving it):
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+
   initiateStrip();
   initiateModeButton();
   readAndSanitizeCurrentMode();
@@ -144,9 +154,11 @@ void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
   if (solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
-    if (!outputState)
+    if (!outputState) {
       outputState = true;
-    digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+      digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+    }
+
     applyCurrentMode(currentMode);
   } else if (outputState && solarVoltage > VOLTAGE_UPPER_THRESHOLD) {
     outputState = false;
@@ -163,9 +175,15 @@ void performVoltageRead() {
 }
 
 float readSolarVoltage() {
-  int rawVoltage = analogRead(VOLTAGE_PIN);
+  long sum = 0;
+  for (int i = 0; i < 10; i++)
+  {
+    sum += analogRead(VOLTAGE_PIN);
+    delay(2);    
+  }
   
-  float voltageAtPin = rawVoltage * dividerFactor;
+  float averagRaw = sum / 10.0;  
+  float voltageAtPin = averagRaw * dividerFactor;
   float solarVoltage = voltageAtPin * ((r1 + r2) / r2);
 
   return solarVoltage;  
@@ -373,14 +391,26 @@ void shutDownWithWD(const byte time_len) {
   wdt_reset();                    // Resets the watchdog
    
   MCUSR = 0;                      // Clears any reset flags
-  WDTCR |= 0b00011000;            // Set WDCE, WDE
-  WDTCR =  0b01000110 | time_len; // Set WDIE and delay
+  WDTCR |= (1 << WDCE) | (1 << WDE);  // Set WDCE, WDE
+  WDTCR = (1 << WDIE) | time_len; // Set WDIE and delay
  
-  ADCSRA &= ~_BV(ADEN);           // Stop the adc
+  ADCSRA &= ~(1 << ADEN);         // Stop the adc
+  
+  // Power off peripherals
+  power_adc_disable();
+  power_spi_disable();
+  power_timer0_disable();
+  power_timer1_disable();
+  power_usart0_disable(); // If available
 
   set_sleep_mode (SLEEP_MODE_PWR_DOWN);
   sleep_bod_disable();            // Disables brown-out detection during sleep
   interrupts();                   // Re-enable interrupts before sleeping
   ADCSRA |= _BV(ADEN);            // Re-enable ADC after wake-up
   sleep_mode();                   // Enter sleep mode (actually sleeps)
+
+  // MCU wakes here
+  // Re-enable peripherals
+  power_all_enable();
+  ADCSRA |= (1 << ADEN);
 }
