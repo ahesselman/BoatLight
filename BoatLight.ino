@@ -59,6 +59,7 @@ const uint16_t sosPattern[] PROGMEM = {
 // Constants
 const uint8_t fadeStep = 15;
 const uint8_t sosPause = 250;
+const uint8_t maxBrightness = 255;
 const uint16_t sosGap = 1500;
 const unsigned long saveDelay = 2000; // EEPROM write delay, in ms
 const float r1 = 10000.0;             // Voltage divider resistor 1 value, in Ohm
@@ -70,6 +71,7 @@ constexpr float dividerFactor = referenceVoltage / 1023.0;  // ADC scale factor
 bool outputState = false;                   // Whether LEDs are powered
 bool sosRunning = false;                    // Whether SOS is active
 bool cycleEnd = false;                      // End of SOS cycle
+bool shouldResetStrip = false;
 uint8_t lastSavedMode = 255;                // Previously saved mode
 uint8_t currentMode = LightMode::OFF_MODE;  
 uint8_t sosIndex = 0;                       // Current SOS pattern step
@@ -104,6 +106,7 @@ void initiateStrip() {
   strip.clear();
   strip.show();
 
+  // Configure the pin that switches the power for the ledstrip
   pinMode(LED_POWER_SWITCH_PIN, OUTPUT);
   digitalWrite(LED_POWER_SWITCH_PIN, LOW);
 }
@@ -138,7 +141,11 @@ void handleModeButtonPress() {
       currentMode = (currentMode + 1) % NUM_MODES;
     }
 
-    lastModeChangeTime = millis(); // update for EEPROM saving
+    if (currentMode != lastSavedMode) {
+      shouldResetStrip = true;
+    }
+
+    lastModeChangeTime = millis(); // update timer for EEPROM saving
   }
 }
 
@@ -152,26 +159,7 @@ void storeCurrentMode() {
 // ----- Voltage Monitoring and Power Control -----
 void performVoltageRead() {
   float solarVoltage = readSolarVoltage();
-
-  if (solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
-    if (!outputState) {
-      outputState = true;
-      digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
-    }
-
-    applyCurrentMode(currentMode);
-  } else if (outputState && solarVoltage > VOLTAGE_UPPER_THRESHOLD) {
-    outputState = false;
-
-    strip.clear();
-    strip.show(); 
-
-    digitalWrite(LED_POWER_SWITCH_PIN, LOW);
-
-    for (int j=0; j < SLEEP_CYCLES; j++) { 
-      shutDownWithWD (0b100001);  // 8 seconds
-    }
-  }
+  handleVoltageState(solarVoltage);
 }
 
 float readSolarVoltage() {
@@ -189,90 +177,112 @@ float readSolarVoltage() {
   return solarVoltage;  
 }
 
+void handleVoltageState(float voltage) {
+  if (voltage < VOLTAGE_LOWER_THRESHOLD) {
+    handleLowVoltage();
+  } else if (outputState && voltage > VOLTAGE_UPPER_THRESHOLD) {
+    handleHighVoltage();
+  }
+}
+
+void handleLowVoltage() {
+  if (!outputState) {
+    outputState = true;
+    digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+  }
+
+  applyCurrentMode(currentMode);
+}
+
+void handleHighVoltage() {
+  outputState = false;
+
+  strip.clear();
+  strip.show(); 
+
+  digitalWrite(LED_POWER_SWITCH_PIN, LOW);
+
+  for (int j=0; j < SLEEP_CYCLES; j++) { 
+    shutDownWithWD (0b100001);  // 8 seconds
+  }  
+}
+
 // ----- LED Mode control -----
 void applyCurrentMode(uint8_t mode) {
-    if (mode != LightMode::OFF_MODE) {
-      digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
-    } else {
-      digitalWrite(LED_POWER_SWITCH_PIN, LOW);
-    }
+  if (mode != LightMode::OFF_MODE) {
+    digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+  }
 
   switch (mode) {
     case LightMode::GREEN: // LED 6–10 green
-      #ifndef WOKWI
-        colorLedsInRange(5, 9, 0, 255, 0, 0, true);
-      #else
-        colorLedsInRange(5, 9, 0, 255, 0, true);
-      #endif
+      showGreen();
       break;
     case LightMode::RED: // LED 1–5 red
-      #ifndef WOKWI
-        colorLedsInRange(0, 4, 255, 0, 0, 0, true);
-      #else
-        colorLedsInRange(0, 4, 255, 0, 0, true);
-      #endif      
+      showRed();     
       break;
     case LightMode::GREEN_RED:  // LED 1–5 red, 6–10 green
-      #ifndef WOKWI
-        colorLedsInRange(0, 4, 255, 0, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, 0, false);
-      #else
-        colorLedsInRange(0, 4, 255, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, false);
-      #endif
+      showGreen();
+      showRed();
       break;
     case LightMode::WHITE_1_10: // LED 1–10 white
-      #ifndef WOKWI
-        colorLedsInRange(0, 9, 0, 0, 0, 255, true);
-      #else
-        colorLedsInRange(0, 9, 255, 255, 255, true);
-      #endif
+      showWhite(0, 9);
       break;
     case LightMode::WHITE_11_16: // LED 11–16 white
-      #ifndef WOKWI
-        colorLedsInRange(10, 15, 0, 0, 0, 255, true);
-      #else
-        colorLedsInRange(10, 15, 255, 255, 255, true);
-      #endif
+      showWhite(10, 15);
       break;
     case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
-      #ifndef WOKWI
-        colorLedsInRange(0, 4, 255, 0, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, 0, false);
-        colorLedsInRange(10, 15, 0, 0, 0, 255, false);
-      #else
-        colorLedsInRange(0, 4, 255, 0, 0, true);
-        colorLedsInRange(5, 9, 0, 255, 0, false);
-        colorLedsInRange(10, 15, 255, 255, 255, false);        
-      #endif
+      showRed();
+      showGreen();
+      showWhite(10, 15);
       break;
     case LightMode::ALL_WHITE: // All white
-      #ifndef WOKWI
-        colorLedsInRange(0, 15, 0, 0, 0, 255, true);
-      #else
-        colorLedsInRange(0, 15, 255, 255, 255, true);
-      #endif
+      showWhite(0, 15);
       break;
     case LightMode::SOS: // SOS
       if (!sosRunning) {
-        sosIndex = 0;
-        sosState = SosState::FADING_IN;
-        sosLastTime = millis();
-        fadeBrightness = 0;
-        sosRunning = true;
+        initiateSOS();
       }
       handleSosAnimation();
       break;
     case LightMode::OFF_MODE: 
     default: // All off
-      strip.clear();
-      sosRunning = false;
+      handleOffMode();
       break;
   }
 
   if (mode != LightMode::SOS) {
     strip.show();
   }
+}
+
+void showRed() {
+  #ifndef WOKWI
+    colorLedsInRange(0, 4, 255, 0, 0, 0, shouldResetStrip);
+  #else
+    colorLedsInRange(0, 4, 255, 0, 0, shouldResetStrip);
+  #endif
+
+  shouldResetStrip = false;
+}
+
+void showGreen() {
+  #ifndef WOKWI
+    colorLedsInRange(5, 9, 0, 255, 0, 0, shouldResetStrip);
+  #else
+    colorLedsInRange(5, 9, 0, 255, 0, shouldResetStrip);
+  #endif
+
+  shouldResetStrip = false;
+}
+
+void showWhite(uint8_t start, uint8_t end) {
+  #ifndef WOKWI
+    colorLedsInRange(start, end, 0, 0, 0, 255, shouldResetStrip);
+  #else
+    colorLedsInRange(start, end, 255, 255, 255, shouldResetStrip);
+  #endif
+
+  shouldResetStrip = false;
 }
 
 // ----- LED color helper -----
@@ -283,8 +293,9 @@ void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t 
 #endif
   if (reset) {
     strip.clear();
-    strip.setBrightness(255);
+    strip.setBrightness(maxBrightness);
   }
+
   for (int i = start; i <= end; i++) {
     #ifndef WOKWI
       strip.setPixelColor(i, strip.Color(r, g, b, w));
@@ -294,9 +305,18 @@ void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t 
   }
 }
 
+void initiateSOS() {
+  sosIndex = 0;
+  sosState = SosState::FADING_IN;
+  sosLastTime = millis();
+  fadeBrightness = 0;
+  sosRunning = true;
+}
+
 // ----- All-white Helper for SOS -----
 void setAllWhite(uint8_t brightness) {
   strip.setBrightness(brightness);
+
   for (int i = 0; i < NUM_LEDS; i++) {
       #ifndef WOKWI
         strip.setPixelColor(i, strip.Color(0, 0, 0, 255));
@@ -304,6 +324,7 @@ void setAllWhite(uint8_t brightness) {
         strip.setPixelColor(i, strip.Color(255, 255, 255));
       #endif
   }
+
   strip.show();
 }
 
@@ -321,7 +342,7 @@ void handleSosAnimation() {
     case SosState::FADING_IN:
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
-        if (fadeBrightness < 255) {
+        if (fadeBrightness < maxBrightness) {
           fadeBrightness += fadeStep;          
           setAllWhite(fadeBrightness);
         } else {
@@ -372,10 +393,13 @@ void handleSosAnimation() {
         }
       }
       break;
-
-    default:
-      break;
   }
+}
+
+void handleOffMode() {
+  strip.clear();
+  sosRunning = false;
+  digitalWrite(LED_POWER_SWITCH_PIN, LOW);
 }
 
 // ----- Watchdog Timer ISR -----
@@ -396,12 +420,16 @@ void shutDownWithWD(const byte time_len) {
  
   ADCSRA &= ~(1 << ADEN);         // Stop the adc
   
-  // Power off peripherals
+  // Power off peripherals (guard if not defined)
   power_adc_disable();
+#ifdef power_spi_disable
   power_spi_disable();
+#endif
   power_timer0_disable();
   power_timer1_disable();
-  power_usart0_disable(); // If available
+#ifdef power_usart0_disable
+  power_usart0_disable();
+#endif
 
   set_sleep_mode (SLEEP_MODE_PWR_DOWN);
   sleep_bod_disable();            // Disables brown-out detection during sleep
