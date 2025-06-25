@@ -100,6 +100,7 @@ handleButtonPress() {
     }
 
     if (currentMode != lastSavedMode) {
+        lastSavedMode = currentMode;
         shouldResetStrip = true;
     }
   }
