@@ -1,1 +1,33 @@
 Documents/3D/
+
+/Boatlight-PIC.X/build/
+/Boatlight-PIC.X/debug/
+/Boatlight-PIC.X/dist/
+
+# MPLAB X project metadata (do not ignore!)
+!**/nbproject/private/
+nbproject/Makefile-*
+nbproject/configurations.xml
+nbproject/private/
+
+# Object files, hex files, and intermediate binaries
+*.hex
+*.elf
+*.cof
+*.o
+*.p1
+*.as
+*.map
+*.lst
+*.sdb
+*.sym
+*.mdb
+*.d
+
+# IDE specific
+*.X.lock
+*.log
+
+# MacOS & general
+.DS_Store
+Thumbs.db
