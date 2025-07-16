@@ -21,11 +21,11 @@ void setup() {
 
 void loop()
 {
-  performVoltageRead();
+  performAndHandleVoltageRead();
   delay(500);
 }
 
-void performVoltageRead() {
+void performAndHandleVoltageRead() {
   float solarVoltage = readSolarVoltage();
 
   if (solarVoltage < VOLTAGE_LOWER_THRESHOLD) {
