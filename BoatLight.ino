@@ -11,14 +11,14 @@
 //#define DEBUG
 //#define WOKWI   // Comment this when testing on Wokwi simulator
 
-#define LED_PIN               0   // PB0
-#define BUTTON_PIN            1   // PB1
-#define VOLTAGE_PIN           A1  // PB2
-#define LED_POWER_SWITCH_PIN  3   // PB3
+#define LED_PIN                 0     // PB0
+#define BUTTON_PIN              1     // PB1
+#define VOLTAGE_PIN             A1    // PB2
+#define LED_POWER_SWITCH_PIN    3     // PB3
 
-#define NUM_LEDS      16
-#define NUM_MODES     9
-#define SLEEP_CYCLES  7   // Sleep duration when idle (7 x 8 sec = ~ 56 sec)
+#define NUM_LEDS                16    // Number of LEDs on the strip
+#define NUM_MODES               9     // Number of modes
+#define SLEEP_CYCLES            7     // Sleep duration when idle (7 x 8 sec = ~ 56 sec)
 #define VOLTAGE_LOWER_THRESHOLD 3.50  // Threshold LEDs on
 #define VOLTAGE_UPPER_THRESHOLD 4.50  // Threshold LEDs off
 
@@ -46,8 +46,7 @@ enum LightMode {
 Bounce2::Button modeButton = Bounce2::Button();
 SosState sosState = SosState::IDLE;
 
-// --- SOS Pattern ---
-// Timing for SOS Morse pattern (in milliseconds)
+// SOS Pattern, timing for SOS Morse pattern (in milliseconds)
 const uint16_t sosPattern[] PROGMEM = {
   250,250,250,  // ...
   750,750,750,  // ---
@@ -61,9 +60,9 @@ const uint8_t fadeStep = 15;
 const uint8_t sosPause = 250;
 const uint8_t maxBrightness = 255;
 const uint16_t sosGap = 1500;
-const unsigned long saveDelay = 2000; // EEPROM write delay, in ms
-const float r1 = 10000.0;             // Voltage divider resistor 1 value, in Ohm
-const float r2 = 10000.0;             // Voltage divider resistor 1 value, in Ohm
+const unsigned long saveDelay = 2000;       // EEPROM write delay, in ms
+const float r1 = 10000.0;                   // Voltage divider resistor 1 value, in Ohm
+const float r2 = 10000.0;                   // Voltage divider resistor 1 value, in Ohm
 constexpr float referenceVoltage = 5.0;
 constexpr float dividerFactor = referenceVoltage / 1023.0;  // ADC scale factor
 
@@ -97,7 +96,7 @@ void setup() {
 void loop() {
   handleModeButtonPress();
   storeCurrentMode();
-  performVoltageRead();
+  performAndHandleVoltageRead();
 }
 
 // ----- Initialization functions -----
@@ -134,10 +133,10 @@ void handleModeButtonPress() {
     unsigned long pressDuration = millis() - pressStartTime;
     
     if (pressDuration >= 1000) {
-      // Long press: jump to OFF mode
+      // Long press -> jump to OFF mode
       currentMode = LightMode::OFF_MODE;
     } else {
-      // Short press: next mode
+      // Short press -> next mode
       currentMode = (currentMode + 1) % NUM_MODES;
     }
 
@@ -157,24 +156,24 @@ void storeCurrentMode() {
 }
 
 // ----- Voltage Monitoring and Power Control -----
-void performVoltageRead() {
+void performAndHandleVoltageRead() {
   float solarVoltage = readSolarVoltage();
   handleVoltageState(solarVoltage);
 }
 
 float readSolarVoltage() {
   long sum = 0;
+  // for noise reduction perform 10 reads and calculate average 
   for (int i = 0; i < 10; i++)
   {
     sum += analogRead(VOLTAGE_PIN);
     delay(2);    
   }
   
-  float averagRaw = sum / 10.0;  
-  float voltageAtPin = averagRaw * dividerFactor;
-  float solarVoltage = voltageAtPin * ((r1 + r2) / r2);
+  float averagRaw = sum / 10.0;
 
-  return solarVoltage;  
+  float voltageAtPin = averagRaw * dividerFactor;
+  return voltageAtPin * ((r1 + r2) / r2); // a voltage divider is used to prevent to voltage go over 5v   
 }
 
 void handleVoltageState(float voltage) {
@@ -185,6 +184,7 @@ void handleVoltageState(float voltage) {
   }
 }
 
+// system will turn on
 void handleLowVoltage() {
   if (!outputState) {
     outputState = true;
@@ -194,6 +194,7 @@ void handleLowVoltage() {
   applyCurrentMode(currentMode);
 }
 
+// system will shut down
 void handleHighVoltage() {
   outputState = false;
 
@@ -231,8 +232,8 @@ void applyCurrentMode(uint8_t mode) {
       showWhite(10, 15);
       break;
     case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
+      showGreen()
       showRed();
-      showGreen();
       showWhite(10, 15);
       break;
     case LightMode::ALL_WHITE: // All white
@@ -255,21 +256,21 @@ void applyCurrentMode(uint8_t mode) {
   }
 }
 
-void showRed() {
-  #ifndef WOKWI
-    colorLedsInRange(0, 4, 255, 0, 0, 0, shouldResetStrip);
-  #else
-    colorLedsInRange(0, 4, 255, 0, 0, shouldResetStrip);
-  #endif
-
-  shouldResetStrip = false;
-}
-
 void showGreen() {
   #ifndef WOKWI
     colorLedsInRange(5, 9, 0, 255, 0, 0, shouldResetStrip);
   #else
     colorLedsInRange(5, 9, 0, 255, 0, shouldResetStrip);
+  #endif
+
+  shouldResetStrip = false;
+}
+
+void showRed() {
+  #ifndef WOKWI
+    colorLedsInRange(0, 4, 255, 0, 0, 0, shouldResetStrip);
+  #else
+    colorLedsInRange(0, 4, 255, 0, 0, shouldResetStrip);
   #endif
 
   shouldResetStrip = false;
