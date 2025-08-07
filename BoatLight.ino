@@ -31,10 +31,10 @@ enum LightMode {
   GREEN = 0,
   RED,
   GREEN_RED,
-  WHITE_1_10,
-  WHITE_11_16,
+  WHITE_FRONT,
+  WHITE_BACK,
   FULL_COMBO,
-  ALL_WHITE,
+  WHITE_ALL,
   SOS,
   OFF_MODE
 };
@@ -282,10 +282,10 @@ void applyCurrentMode(uint8_t mode) {
       showGreen();
       showRed();
       break;
-    case LightMode::WHITE_1_10: // LED 1–10 white
+    case LightMode::WHITE_FRONT: // LED 1–10 white
       showWhite(LightSectorWhiteMode::FRONT);
       break;
-    case LightMode::WHITE_11_16: // LED 11–16 white
+    case LightMode::WHITE_BACK: // LED 11–16 white
       showWhite(LightSectorWhiteMode::BACK);
       break;
     case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
@@ -293,7 +293,7 @@ void applyCurrentMode(uint8_t mode) {
       showRed();
       showWhite(LightSectorWhiteMode::BACK);
       break;
-    case LightMode::ALL_WHITE: // All white
+    case LightMode::WHITE_ALL: // All white
       setAllWhite(maxBrightness);
       break;
     case LightMode::SOS: // SOS

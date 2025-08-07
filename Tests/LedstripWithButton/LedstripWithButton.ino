@@ -17,10 +17,10 @@ enum LightMode {
   GREEN = 0,
   RED,
   GREEN_RED,
-  WHITE_1_10,
-  WHITE_11_16,
+  WHITE_FRONT,
+  WHITE_BACK,
   FULL_COMBO,
-  ALL_WHITE,
+  WHITE_ALL,
   SOS,
   OFF_MODE
 };
@@ -121,11 +121,11 @@ void applyCurrentMode(uint8_t mode) {
       showGreen();
       break;
 
-    case LightMode::WHITE_1_10:
+    case LightMode::WHITE_FRONT:
       showWhite(0, 9);
       break;
 
-    case LightMode::WHITE_11_16:
+    case LightMode::WHITE_BACK:
       showWhite(10, 15);
       break;
 
@@ -135,7 +135,7 @@ void applyCurrentMode(uint8_t mode) {
       showWhite(10, 15);
       break;
 
-    case LightMode::ALL_WHITE:
+    case LightMode::WHITE_ALL:
       showWhite(0, 15);
       break;
     
