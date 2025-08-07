@@ -42,7 +42,6 @@ enum LightMode {
 struct LightSectors {
   uint8_t red[NUM_LEDS];
   uint8_t green[NUM_LEDS];
-  uint8_t white[NUM_LEDS];
   uint8_t whiteBack[NUM_LEDS];
   uint8_t whiteFront[NUM_LEDS];
 
