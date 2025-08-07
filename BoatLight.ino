@@ -271,31 +271,31 @@ void applyCurrentMode(uint8_t mode) {
   }
 
   switch (mode) {
-    case LightMode::GREEN: // LED 6–10 green
+    case LightMode::GREEN: 
       showGreen();
       break;
-    case LightMode::RED: // LED 1–5 red
+    case LightMode::RED: 
       showRed();     
       break;
-    case LightMode::GREEN_RED:  // LED 1–5 red, 6–10 green
+    case LightMode::GREEN_RED:  
       showGreen();
       showRed();
       break;
-    case LightMode::WHITE_FRONT: // LED 1–10 white
+    case LightMode::WHITE_FRONT: 
       showWhite(LightSectorWhiteMode::FRONT);
       break;
-    case LightMode::WHITE_BACK: // LED 11–16 white
+    case LightMode::WHITE_BACK: 
       showWhite(LightSectorWhiteMode::BACK);
       break;
-    case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
+    case LightMode::FULL_COMBO: 
       showGreen();
       showRed();
       showWhite(LightSectorWhiteMode::BACK);
       break;
-    case LightMode::WHITE_ALL: // All white
+    case LightMode::WHITE_ALL: 
       setAllWhite(maxBrightness);
       break;
-    case LightMode::SOS: // SOS
+    case LightMode::SOS: 
       if (!sosRunning) {
         initiateSOS();
       }
