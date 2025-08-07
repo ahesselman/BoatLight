@@ -64,25 +64,27 @@ enum LightSectorWhiteMode {
 Bounce2::Button modeButton = Bounce2::Button();
 SosState sosState = SosState::IDLE;
 
-// SOS Pattern, timing for SOS Morse pattern (in milliseconds)
-const uint16_t sosPattern[] PROGMEM = {
-  250,250,250,  // ...
-  750,750,750,  // ---
-  250,250,250   // ...
-};
-
 #define SOS_PATTERN_LENGTH (sizeof(sosPattern) / sizeof(sosPattern[0]))
 
 // Constants
-const uint8_t fadeStep = 15;
-const uint8_t sosPause = 250;
+const uint8_t fadeStepDuration = 15;
+const uint8_t sosPauseDuration = 250;
+const uint8_t dotDuration = 250;
+const uint16_t dashDuration = 750;
+const uint16_t sosGapDuration = 1500;
+const unsigned long saveDelayDuration = 2000;       // EEPROM write delay, in ms
 const uint8_t maxBrightness = 255;
-const uint16_t sosGap = 1500;
-const unsigned long saveDelay = 2000;       // EEPROM write delay, in ms
 const float r1 = 10000.0;                   // Voltage divider resistor 1 value, in Ohm
 const float r2 = 10000.0;                   // Voltage divider resistor 1 value, in Ohm
 constexpr float referenceVoltage = 5.0;
 constexpr float dividerFactor = referenceVoltage / 1023.0;  // ADC scale factor
+
+// SOS Pattern, timing for SOS Morse pattern (in milliseconds)
+const uint16_t sosPattern[] PROGMEM = {
+  dotDuration,dotDuration,dotDuration,  // ...
+  dashDuration,dashDuration,dashDuration,  // ---
+  dotDuration,dotDuration,dotDuration   // ...
+};
 
 // Globals
 bool outputState = false;                   // Whether LEDs are powered
@@ -205,7 +207,7 @@ void handleModeButtonPress() {
 }
 
 void storeCurrentMode() {
-  if (currentMode != lastSavedMode && millis() - lastModeChangeTime > saveDelay) {    
+  if (currentMode != lastSavedMode && millis() - lastModeChangeTime > saveDelayDuration) {    
     EEPROM.update(0, currentMode);
     lastSavedMode = currentMode;
   }
@@ -442,7 +444,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness > 0) {
-          fadeBrightness -= fadeStep;          
+          fadeBrightness -= fadeStepDuration;          
           setAllWhite(fadeBrightness);
         } else {
           strip.clear();
@@ -460,7 +462,7 @@ void handleSosAnimation() {
       break;
 
     case SosState::OFF:
-      if (now - sosLastTime >= (cycleEnd ? sosGap : sosPause)) {
+      if (now - sosLastTime >= (cycleEnd ? sosGapDuration : sosPauseDuration)) {
         lastStepTime = now;          
         if (!paused) {
           paused = true;

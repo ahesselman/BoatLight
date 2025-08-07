@@ -30,9 +30,9 @@ Bounce2::Button modeButton = Bounce2::Button();
 
 SosState sosState = SosState::IDLE;
 
-const uint8_t fadeStep = 15;
-const uint8_t sosPause = 250;
-const uint16_t sosGap = 1500;
+const uint8_t fadeStepDuration = 15;
+const uint8_t sosPauseDuration = 250;
+const uint16_t sosGapDuration = 1500;
 
 const uint16_t sosPattern[] PROGMEM = {
   250,250,250,  // ...
@@ -205,7 +205,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness < 255) {
-            fadeBrightness += fadeStep;
+            fadeBrightness += fadeStepDuration;
             setAllWhite(fadeBrightness);
         } else {
             sosState = SosState::ON;
@@ -223,7 +223,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness > 0) {
-          fadeBrightness -= fadeStep;
+          fadeBrightness -= fadeStepDuration;
           setAllWhite(fadeBrightness);
         } else {
           sosState = SosState::OFF;
@@ -241,7 +241,7 @@ void handleSosAnimation() {
       }
       break;
     case SosState::OFF:
-      if (now - sosLastTime >= (cycleEnd ? sosGap : sosPause)) {
+      if (now - sosLastTime >= (cycleEnd ? sosGapDuration : sosPauseDuration)) {
         lastStepTime = now;
         if (!paused) {
           paused = true;
