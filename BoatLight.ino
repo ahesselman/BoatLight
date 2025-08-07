@@ -16,7 +16,8 @@
 #define VOLTAGE_PIN             A1    // PB2
 #define LED_POWER_SWITCH_PIN    3     // PB3
 
-#define NUM_LEDS                16    // Number of LEDs on the strip
+#define NUM_LEDS                17    // Number of LEDs on the strip
+#define COLOR_DEGREES           112.5 // Amount of degress for the red and green LEDs
 #define NUM_MODES               9     // Number of modes
 #define SLEEP_CYCLES            7     // Sleep duration when idle (7 x 8 sec = ~ 56 sec)
 #define VOLTAGE_LOWER_THRESHOLD 3.50  // Threshold LEDs on
@@ -36,6 +37,24 @@ enum LightMode {
   ALL_WHITE,
   SOS,
   OFF_MODE
+};
+
+struct LightSectors {
+  uint8_t red[NUM_LEDS];
+  uint8_t green[NUM_LEDS];
+  uint8_t white[NUM_LEDS];
+  uint8_t whiteBack[NUM_LEDS];
+  uint8_t whiteFront[NUM_LEDS];
+
+  uint8_t redCount;
+  uint8_t greenCount;
+  uint8_t whiteBackCount;
+  uint8_t whiteFrontCount;
+};
+
+enum LightSectorWhiteMode {
+  FRONT = 0,
+  BACK
 };
 
 #ifndef WOKWI
@@ -78,6 +97,7 @@ uint8_t fadeBrightness = 0;
 unsigned long sosLastTime = 0;
 unsigned long lastModeChangeTime = 0;
 unsigned long pressStartTime = 0;
+LightSectors lightSectors;
 
 // ----- Arduino setup -----
 void setup() {
@@ -89,6 +109,7 @@ void setup() {
 
   initiateStrip();
   initiateModeButton();
+  lightSectors = calculateNavLightLEDs();
   readAndSanitizeCurrentMode();
 }
 
@@ -119,6 +140,42 @@ void initiateModeButton() {
 void readAndSanitizeCurrentMode() {
   currentMode = EEPROM.read(0);
   if (currentMode >= NUM_MODES) currentMode = LightMode::GREEN;
+}
+
+// Define the ids for the leds for the various color 
+LightSectors calculateNavLightLEDs() {
+  LightSectors result;
+  result.redCount = 0;
+  result.greenCount = 0;
+  result.whiteFrontCount = 0;
+  result.whiteBackCount = 0;
+
+  float degrees_per_led = 360.0 / NUM_LEDS;
+  uint8_t numberColoredLeds = round(COLOR_DEGREES / degrees_per_led);
+
+  // Red LEDs
+  for (uint8_t i = 0; i < numberColoredLeds; i++) {
+    result.red[result.redCount++] = i + 1;
+  }
+
+  // Green LEDs
+  for (uint8_t i = 0; i < numberColoredLeds; i++) {
+    result.green[result.greenCount++] = numberColoredLeds + i + 1;
+  }
+
+  // White LEDs
+  uint8_t numberWhiteLeds = NUM_LEDS - (2 * numberColoredLeds);
+  uint8_t startIdOfWhiteLed = 2 * numberColoredLeds;
+
+  for (uint8_t i = 0; i < numberWhiteLeds; i++) {
+    result.whiteBack[result.whiteBackCount++] = startIdOfWhiteLed + i + 1;
+  }
+
+  for (uint8_t i = 0; i < numberColoredLeds * 2; i++) {
+    result.whiteFront[result.whiteFrontCount++] = i + 1; 
+  }
+  
+  return result;
 }
 
 // ----- Button and EEPROM Handling -----
@@ -226,18 +283,18 @@ void applyCurrentMode(uint8_t mode) {
       showRed();
       break;
     case LightMode::WHITE_1_10: // LED 1–10 white
-      showWhite(0, 9);
+      showWhite(LightSectorWhiteMode::FRONT);
       break;
     case LightMode::WHITE_11_16: // LED 11–16 white
-      showWhite(10, 15);
+      showWhite(LightSectorWhiteMode::BACK);
       break;
     case LightMode::FULL_COMBO: // 1–5 red, 6–10 green, 11–16 white
-      showGreen()
+      showGreen();
       showRed();
-      showWhite(10, 15);
+      showWhite(LightSectorWhiteMode::BACK);
       break;
     case LightMode::ALL_WHITE: // All white
-      showWhite(0, 15);
+      setAllWhite(maxBrightness);
       break;
     case LightMode::SOS: // SOS
       if (!sosRunning) {
@@ -256,31 +313,53 @@ void applyCurrentMode(uint8_t mode) {
   }
 }
 
-void showGreen() {
-  #ifndef WOKWI
-    colorLedsInRange(5, 9, 0, 255, 0, 0, shouldResetStrip);
-  #else
-    colorLedsInRange(5, 9, 0, 255, 0, shouldResetStrip);
-  #endif
-
-  shouldResetStrip = false;
-}
 
 void showRed() {
+  uint8_t firstLed = lightSectors.red[0];
+  uint8_t lastLed = lightSectors.red[lightSectors.redCount - 1];
+
   #ifndef WOKWI
-    colorLedsInRange(0, 4, 255, 0, 0, 0, shouldResetStrip);
+    colorLedsInRange(firstLed, lastLed, 255, 0, 0, 0, shouldResetStrip);
   #else
-    colorLedsInRange(0, 4, 255, 0, 0, shouldResetStrip);
+    colorLedsInRange(firstLed, lastLed, 255, 0, 0, shouldResetStrip);
   #endif
 
   shouldResetStrip = false;
 }
 
-void showWhite(uint8_t start, uint8_t end) {
+void showGreen() {
+  uint8_t firstLed = lightSectors.green[0];
+  uint8_t lastLed = lightSectors.green[lightSectors.greenCount - 1];
+
   #ifndef WOKWI
-    colorLedsInRange(start, end, 0, 0, 0, 255, shouldResetStrip);
+    colorLedsInRange(firstLed, lastLed, 0, 255, 0, 0, shouldResetStrip);
   #else
-    colorLedsInRange(start, end, 255, 255, 255, shouldResetStrip);
+    colorLedsInRange(firstLed, lastLed, 0, 255, 0, shouldResetStrip);
+  #endif
+
+  shouldResetStrip = false;
+}
+
+void showWhite(LightSectorWhiteMode whiteMode) {
+  uint8_t firstLed = 0;
+  uint8_t lastLed = 0;
+
+  switch (whiteMode) {
+  case LightSectorWhiteMode::BACK:
+    firstLed = lightSectors.whiteBack[0];
+    lastLed = lightSectors.whiteBack[lightSectors.whiteBackCount - 1];
+    break;
+  case LightSectorWhiteMode::FRONT:
+    firstLed = lightSectors.whiteFront[0];
+    lastLed = lightSectors.whiteFront[lightSectors.whiteFrontCount - 1];
+    break;
+  default:
+    break;
+
+  #ifndef WOKWI
+    colorLedsInRange(firstLed, lastLed, 0, 0, 0, 255, shouldResetStrip);
+  #else
+    colorLedsInRange(firstLed, lastLed, 255, 255, 255, shouldResetStrip);
   #endif
 
   shouldResetStrip = false;
