@@ -17,10 +17,10 @@ enum LightMode {
   GREEN = 0,
   RED,
   GREEN_RED,
-  WHITE_1_10,
-  WHITE_11_16,
+  WHITE_FRONT,
+  WHITE_BACK,
   FULL_COMBO,
-  ALL_WHITE,
+  WHITE_ALL,
   SOS,
   OFF_MODE
 };
@@ -30,9 +30,9 @@ Bounce2::Button modeButton = Bounce2::Button();
 
 SosState sosState = SosState::IDLE;
 
-const uint8_t fadeStep = 15;
-const uint8_t sosPause = 250;
-const uint16_t sosGap = 1500;
+const uint8_t fadeStepDuration = 15;
+const uint8_t sosPauseDuration = 250;
+const uint16_t sosGapDuration = 1500;
 
 const uint16_t sosPattern[] PROGMEM = {
   250,250,250,  // ...
@@ -121,11 +121,11 @@ void applyCurrentMode(uint8_t mode) {
       showGreen();
       break;
 
-    case LightMode::WHITE_1_10:
+    case LightMode::WHITE_FRONT:
       showWhite(0, 9);
       break;
 
-    case LightMode::WHITE_11_16:
+    case LightMode::WHITE_BACK:
       showWhite(10, 15);
       break;
 
@@ -135,7 +135,7 @@ void applyCurrentMode(uint8_t mode) {
       showWhite(10, 15);
       break;
 
-    case LightMode::ALL_WHITE:
+    case LightMode::WHITE_ALL:
       showWhite(0, 15);
       break;
     
@@ -205,7 +205,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness < 255) {
-            fadeBrightness += fadeStep;
+            fadeBrightness += fadeStepDuration;
             setAllWhite(fadeBrightness);
         } else {
             sosState = SosState::ON;
@@ -223,7 +223,7 @@ void handleSosAnimation() {
       if (now - lastStepTime >= 10) {
         lastStepTime = now;
         if (fadeBrightness > 0) {
-          fadeBrightness -= fadeStep;
+          fadeBrightness -= fadeStepDuration;
           setAllWhite(fadeBrightness);
         } else {
           sosState = SosState::OFF;
@@ -241,7 +241,7 @@ void handleSosAnimation() {
       }
       break;
     case SosState::OFF:
-      if (now - sosLastTime >= (cycleEnd ? sosGap : sosPause)) {
+      if (now - sosLastTime >= (cycleEnd ? sosGapDuration : sosPauseDuration)) {
         lastStepTime = now;
         if (!paused) {
           paused = true;
