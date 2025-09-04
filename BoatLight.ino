@@ -83,13 +83,13 @@ struct LedStripSectors {
 };
 
 // Globals
-bool outputState = false;                   // Whether LEDs are powered
+bool ledsPowered = false;                   // Whether LEDs are powered
 bool sosRunning = false;                    // Whether SOS is active
-bool cycleEnd = false;                      // End of SOS cycle
+bool sosCycleEnd = false;                   // End of SOS cycle
 bool shouldResetStrip = false;
 uint8_t lastSavedMode = 255;                // Previously saved mode
 uint8_t currentMode = LightMode::OFF_MODE;  // Current mode
-uint8_t sosIndex = 0;                       // Current SOS pattern step
+uint8_t sosPatternStepIndex = 0;            // Current SOS pattern step
 uint8_t fadeBrightness = 0;
 unsigned long sosLastTime = 0;
 unsigned long lastModeChangeTime = 0;
@@ -257,14 +257,14 @@ float readSolarVoltage() {
 void handleVoltageState(float voltage) {
   if (voltage < voltageLowerThreshold) {
     handleLowVoltage(); // system will turn on
-  } else if (outputState && voltage > voltageUpperThreshold) {
+  } else if (ledsPowered && voltage > voltageUpperThreshold) {
     handleHighVoltage(); // system will shut down
   }
 }
 
 void handleLowVoltage() {
-  if (!outputState) {
-    outputState = true;
+  if (!ledsPowered) {
+    ledsPowered = true;
     digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
   }
 
@@ -272,7 +272,7 @@ void handleLowVoltage() {
 }
 
 void handleHighVoltage() {
-  outputState = false;
+  ledsPowered = false;
 
   ledStrip.clear();
   ledStrip.show(); 
@@ -405,7 +405,7 @@ void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t 
 }
 
 void initiateSOS() {
-  sosIndex = 0;
+  sosPatternStepIndex = 0;
   sosState = SosState::FADING_IN;
   sosLastTime = millis();
   fadeBrightness = 0;
@@ -435,7 +435,7 @@ void handleSosAnimation() {
   if (!sosRunning) return;
 
   unsigned long now = millis();
-  int duration = pgm_read_word(&sosPattern[sosIndex]);
+  int duration = pgm_read_word(&sosPattern[sosPatternStepIndex]);
 
   switch (sosState) {
     case SosState::FADING_IN:
@@ -470,23 +470,23 @@ void handleSosAnimation() {
           sosState = SosState::OFF;
           sosLastTime = now;
 
-          sosIndex++;
-          if (sosIndex >= SOS_PATTERN_LENGTH) {
-            sosIndex = 0;
-            cycleEnd = true;
+          sosPatternStepIndex++;
+          if (sosPatternStepIndex >= SOS_PATTERN_LENGTH) {
+            sosPatternStepIndex = 0;
+            sosCycleEnd = true;
           }          
         }
       }
       break;
 
     case SosState::OFF:
-      if (now - sosLastTime >= (cycleEnd ? sosGapDuration : sosPauseDuration)) {
+      if (now - sosLastTime >= (sosCycleEnd ? sosGapDuration : sosPauseDuration)) {
         lastStepTime = now;          
         if (!paused) {
           paused = true;
         } else {
           paused = false;
-          cycleEnd = false;
+          sosCycleEnd = false;
           sosState = SosState::FADING_IN;
           fadeBrightness = 0;          
         }
