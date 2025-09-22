@@ -12,11 +12,11 @@
 //#define WOKWI   // Comment this when testing on Wokwi simulator
 
 // Pins
-#define LED_PIN                 0     // PB0
-#define BUTTON_MODE_PIN         1     // PB1
-#define VOLTAGE_PIN             A1    // PB2
-#define LED_POWER_SWITCH_PIN    3     // PB3
-#define BUTTON_ON_OFF_PIN       4     // PB4
+#define LED_PIN                 0     // PB0 - 5
+#define BUTTON_MODE_PIN         1     // PB1 - 6 (b on remote)
+#define VOLTAGE_PIN             A1    // PB2 - 7
+#define LED_POWER_SWITCH_PIN    3     // PB3 - 2
+#define BUTTON_ON_OFF_PIN       4     // PB4 - 3 (a on remote)
 
 #define SOS_PATTERN_LENGTH (sizeof(sosPattern) / sizeof(sosPattern[0]))
 
