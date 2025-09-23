@@ -25,7 +25,7 @@ const uint8_t numberOfLeds = 17;      // Number of LEDs on the ledStrip.
                                       // When this number is changed, 
                                       // the code will calculate how to divide the leds
 const uint8_t numberOfModes = 9;      // Number of modes
-const byte sleepTime = 0b100001;      // Sleep duration per cycle, 8 seconds
+const byte sleepTime = 0b100001; //WDTO_8S;      // Sleep duration per cycle, 8 seconds
 const uint8_t sleepCycles = 7;        // Number of sleep cycles when idle (7 x 8 sec = ~ 56 sec)
 const uint8_t fadeStepDuration = 15;  // Step size to increase/decrease the brightness of the leds
 const uint8_t sosPauseDuration = 250;
@@ -142,12 +142,12 @@ void initializeLedStripSectors() {
 
   // Red LEDs
   for (uint8_t i = 0; i < numberColoredLeds; i++) {
-    ledStripSectors.red[ledStripSectors.redCount++] = i + 1;
+    ledStripSectors.red[ledStripSectors.redCount++] = i;
   }
 
   // Green LEDs
   for (uint8_t i = 0; i < numberColoredLeds; i++) {
-    ledStripSectors.green[ledStripSectors.greenCount++] = numberColoredLeds + i + 1;
+    ledStripSectors.green[ledStripSectors.greenCount++] = numberColoredLeds + i;
   }
 
   // White LEDs
@@ -155,11 +155,11 @@ void initializeLedStripSectors() {
   uint8_t startIdOfWhiteLed = 2 * numberColoredLeds;
 
   for (uint8_t i = 0; i < numberWhiteLeds; i++) {
-    ledStripSectors.whiteBack[ledStripSectors.whiteBackCount++] = startIdOfWhiteLed + i + 1;
+    ledStripSectors.whiteBack[ledStripSectors.whiteBackCount++] = startIdOfWhiteLed + i;
   }
 
   for (uint8_t i = 0; i < numberColoredLeds * 2; i++) {
-    ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount++] = i + 1; 
+    ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount++] = i; 
   }
 }
 
@@ -201,8 +201,10 @@ void handleOnOffButtonPress() {
   if (onOffButton.rose()) {
     if (currentMode != LightMode::OFF_MODE) {
       currentMode = LightMode::OFF_MODE;
+      lastSavedMode = currentMode; 
     } else {
-      readAndSanitizeCurrentMode();
+      //readAndSanitizeCurrentMode();
+      currentMode = lastSavedMode;
     }
   }
 }
@@ -281,7 +283,7 @@ void handleHighVoltage() {
 
   for (int j=0; j < sleepCycles; j++) { 
     shutDownWithWD(sleepTime); 
-  }  
+  } 
 }
 
 // ----- LED Mode control -----
@@ -509,35 +511,25 @@ ISR(WDT_vect) {
 
 // ----- Sleep Handler -----
 // Puts device to deep sleep for power saving
-void shutDownWithWD(const byte time_len) {
-  noInterrupts();                 // Disable interrupts temporarily
-  wdt_reset();                    // Reset the watchdog
-   
-  MCUSR = 0;                      // Clear reset flags
-  WDTCR |= (1 << WDCE) | (1 << WDE);  // Set WDCE, WDE
-  WDTCR = (1 << WDIE) | time_len; // Enable watchdog interrupt, set timeout
- 
-  // Disable ADC and peripherals before sleep
+void shutDownWithWD(uint8_t wdt_period) {
+  noInterrupts();
+  wdt_reset();
+
+  MCUSR = 0;
+  WDTCR = (1 << WDCE) | (1 << WDE);
+  WDTCR = (1 << WDIE) | wdt_period; // e.g., WDTO_8S
+
+  // Disable ADC and peripherals
   ADCSRA &= ~(1 << ADEN);
-  power_adc_disable();
-#ifdef power_spi_disable
-  power_spi_disable();
-#endif
-  power_timer0_disable();
-  power_timer1_disable();
-#ifdef power_usart0_disable
-  power_usart0_disable();
-#endif
+  power_all_disable();
 
-  // Set sleep mode
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_bod_disable();            // Disable brown-out detection during sleep
+  sleep_bod_disable();
 
-  interrupts();                   // Re-enable interrupts before sleeping
-  sleep_mode();                   // Enter sleep mode (MCU actually sleeps here)
+  interrupts();
+  sleep_mode();   // sleep until WDT interrupt
 
-  // ---- MCU wakes here after WDT interrupt ----
-  // Re-enable peripherals and ADC
+  // wakes here
   power_all_enable();
   ADCSRA |= (1 << ADEN);
 }
