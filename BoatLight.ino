@@ -514,11 +514,11 @@ ISR(WDT_vect) {
 void shutDownWithWD(uint8_t wdt_period) {
   noInterrupts();
   wdt_reset();
-
+   
   MCUSR = 0;
   WDTCR = (1 << WDCE) | (1 << WDE);
   WDTCR = (1 << WDIE) | wdt_period; // e.g., WDTO_8S
-
+ 
   // Disable ADC and peripherals
   ADCSRA &= ~(1 << ADEN);
   power_all_disable();
