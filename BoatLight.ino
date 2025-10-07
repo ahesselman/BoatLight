@@ -195,6 +195,7 @@ void readAndSanitizeCurrentMode() {
 // ----- Button and EEPROM Handling -----
 
 void handleOnOffButtonPress() {
+  /*
   onOffButton.update();
   
   // From LOW to HIGH
@@ -207,31 +208,64 @@ void handleOnOffButtonPress() {
       currentMode = lastSavedMode;
     }
   }
+  */
+  
+  onOffButton.update();
+
+  if (onOffButton.rose()) {
+    if (currentMode != LightMode::OFF_MODE) {
+      // Turn off, but remember last active mode
+      lastSavedMode = currentMode;
+      currentMode = LightMode::OFF_MODE;
+    } else {
+      // Turn back on using last active mode
+      currentMode = lastSavedMode;
+    }
+    shouldResetStrip = true;
+  }
 }
 
 void handleModeButtonPress() {
+  
   modeButton.update();
 
-  // From LOW to HIGH
   if (modeButton.rose()) {
-    currentMode = (currentMode + 1) % numberOfModes;
-  
-    if (currentMode != lastSavedMode) {
-      shouldResetStrip = true;
-      lastModeChangeTime = millis(); // update timer for EEPROM saving
-    }
+    currentMode = (currentMode + 1) % (numberOfModes - 1); // exclude OFF_MODE while loopint through the modus
+    shouldResetStrip = true;
+    lastModeChangeTime = millis();
   }
 }
 
 void storeCurrentMode() {
-  // The current mode will only be stored if it is not in mode off, 
-  // changed and set for saveDelayDuration time
-  if (currentMode != LightMode::OFF_MODE && 
-      currentMode != lastSavedMode && 
-      millis() - lastModeChangeTime > saveDelayDuration) {    
+  
+  // Only store if:
+  // - not in OFF_MODE
+  // - mode changed from EEPROM
+  // - enough time has passed since the last manual change
+  // - and not right after power toggle
+  static bool justTurnedOn = false;
+
+  // Detect turn-on event
+  static uint8_t prevMode = LightMode::OFF_MODE;
+  if (prevMode == LightMode::OFF_MODE && currentMode != LightMode::OFF_MODE) {
+    justTurnedOn = true;
+    lastModeChangeTime = millis(); // reset timer after turning on
+  }
+
+  if (currentMode != LightMode::OFF_MODE &&
+      currentMode != lastSavedMode &&
+      millis() - lastModeChangeTime > saveDelayDuration &&
+      !justTurnedOn) {
     EEPROM.update(0, currentMode);
     lastSavedMode = currentMode;
   }
+
+  // After one loop cycle, clear "just turned on" flag
+  if (justTurnedOn && millis() - lastModeChangeTime > saveDelayDuration) {
+    justTurnedOn = false;
+  }
+
+  prevMode = currentMode;
 }
 
 // ----- Voltage Monitoring and Power Control -----
