@@ -100,6 +100,7 @@ struct LedStripSectors {
 // ------------------------------------------------------------
 bool ledsPowered                  = false;
 bool shouldResetStrip             = false;
+bool sosInitialized               = false;
 uint8_t currentMode               = LightMode::OFF_MODE;
 uint8_t lastActiveMode            = LightMode::GREEN;
 unsigned long lastModeChangeTime  = 0;
@@ -365,11 +366,12 @@ void applyCurrentMode(uint8_t mode) {
     default:                     handleOffMode(); break;
   }
 
+  if (mode != LightMode::SOS && sosInitialized)
+    sosInitialized = false;
+
   if (mode != LightMode::SOS && mode != LightMode::FLASH)
     ledStrip.show();
 }
-
-
 
 // ------------------------------------------------------------
 // SOS Mode
@@ -379,18 +381,17 @@ void handleSosAnimation() {
   static uint8_t letterIndex = 0;
   static uint8_t symbolIndex = 0;
   static bool ledOn = false;
-  static bool initialized = false;
   static uint16_t currentDelay = 0;
 
   if (currentMode != LightMode::SOS) {
-    initialized = false;
+    sosInitialized = false;
     return;
   }
 
   unsigned long now = millis();
 
-  if (!initialized) {
-    initialized = true;
+  if (!sosInitialized) {
+    sosInitialized = true;
     letterIndex = 0;
     symbolIndex = 0;
     ledOn = false;
