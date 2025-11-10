@@ -366,7 +366,7 @@ void applyCurrentMode(uint8_t mode) {
     default:                     handleOffMode(); break;
   }
 
-  if (sosInitialized && mode != LightMode::SOS)
+  if (mode != LightMode::SOS && sosInitialized)
     sosInitialized = false;
 
   if (mode != LightMode::SOS && mode != LightMode::FLASH)
