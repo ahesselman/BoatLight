@@ -3,6 +3,7 @@
 #include <EEPROM.h>
 #include <avr/sleep.h>
 #include <avr/wdt.h>
+#include <util/delay.h>
 
 #ifdef __AVR__
  #include <avr/power.h>
@@ -59,8 +60,11 @@ const float voltageLowerThreshold     = 1.75;
 const float voltageUpperThreshold     = 3.75;
 const float resistor1Value            = 10000.0;
 const float resistor2Value            = 10000.0;
-constexpr float referenceVoltage      = 5.0;
-constexpr float dividerFactor         = referenceVoltage / 1023.0;
+const float DIVIDER_RATIO             = (resistor1Value + resistor2Value) / resistor2Value;
+//constexpr float referenceVoltage      = 5.0;
+//constexpr float dividerFactor         = referenceVoltage / 1023.0;
+const uint8_t voltageSamples          = 10;
+const uint16_t voltageStableDelay     = 50; 
 
 /* -- Morse timing constants --
     1. The length of a dot is 1 time unit.
@@ -98,15 +102,18 @@ struct LedStripSectors {
 // ------------------------------------------------------------
 // Globals
 // ------------------------------------------------------------
-bool ledsPowered                  = false;
-bool shouldResetStrip             = false;
-bool sosInitialized               = false;
-uint8_t currentMode               = LightMode::OFF_MODE;
-uint8_t lastActiveMode            = LightMode::GREEN;
-unsigned long lastModeChangeTime  = 0;
-unsigned long pressStartTime      = 0;
-uint8_t sosPatternStepIndex       = 0;
-unsigned long sosLastTime         = 0;
+bool ledsPowered                    = false;
+bool shouldResetStrip               = false;
+bool sosInitialized                 = false;
+uint8_t currentMode                 = LightMode::OFF_MODE;
+uint8_t lastActiveMode              = LightMode::GREEN;
+unsigned long lastModeChangeTime    = 0;
+unsigned long pressStartTime        = 0;
+uint8_t sosPatternStepIndex         = 0;
+unsigned long sosLastTime           = 0;
+uint8_t voltageHighCount            = 0;
+uint8_t voltageLowCount             = 0;
+const uint8_t requiredStableCounts  = 3;
 
 LedStripSectors ledStripSectors;
 
@@ -302,11 +309,24 @@ void storeCurrentMode() {
 // ------------------------------------------------------------
 // Voltage Reading & Power Control
 // ------------------------------------------------------------
+
+// Measures Vcc via internal bandgap (1.1V) 
+long readVcc() {
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1); // select Vbg (1.1V) as input, Vref = Vcc
+  delay(2);
+  ADCSRA |= _BV(ADSC);
+  while (bit_is_set(ADCSRA, ADSC));
+  uint16_t result = ADC;
+  long vcc = (1100L * 1023L) / result;
+  return vcc;
+}
+
 void performAndHandleVoltageRead() {
   float solarVoltage = readSolarVoltage();
   handleVoltageState(solarVoltage);
 }
 
+/*
 float readSolarVoltage() {
   long sum = 0;
   for (int i = 0; i < 10; i++) {
@@ -317,12 +337,57 @@ float readSolarVoltage() {
   float voltageAtPin = avg * dividerFactor;
   return voltageAtPin * ((resistor1Value + resistor2Value) / resistor2Value);
 }
+*/
 
+float readSolarVoltage() {
+  long vcc_mV = readVcc();
+  long sum = 0;
+  for (uint8_t i = 0; i < voltageSamples; i++) {
+    sum += analogRead(VOLTAGE_PIN);
+    _delay_ms(2);
+  }
+  float avg = float(sum) / float(voltageSamples);
+  float voltageAtPin_mV = (avg * vcc_mV) / 1023.0;
+  float solarVoltage_mV = voltageAtPin_mV * DIVIDER_RATIO;
+  return solarVoltage_mV / 1000.0;
+}
+/*
 void handleVoltageState(float voltage) {
   if (voltage < voltageLowerThreshold) {
     handleLowVoltage();
   } else if (ledsPowered && voltage > voltageUpperThreshold) {
     handleHighVoltage();
+  }
+}
+*/
+
+void handleVoltageState(float voltage) {
+  if (voltage < voltageLowerThreshold) {
+    voltageLowCount++;
+    voltageHighCount = 0;
+  } else if (voltage > voltageUpperThreshold) {
+    voltageHighCount++;
+    voltageLowCount = 0;
+  } else {
+    voltageHighCount = 0;
+    voltageLowCount = 0;
+  }
+
+  if (voltageLowCount >= requiredStableCounts) {
+    if (!ledsPowered) {
+      ledsPowered = true;
+      digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
+      shouldResetStrip = true;
+    }
+    applyCurrentMode(currentMode);
+    voltageLowCount = 0;
+  } else if (voltageHighCount >= requiredStableCounts) {
+    if (ledsPowered) {
+      handleHighVoltage();
+    } else {
+      handleHighVoltage();
+    }
+    voltageHighCount = 0;
   }
 }
 
