@@ -56,7 +56,7 @@ const uint8_t initBrightness          = 100;
 const uint8_t maxBrightness           = 255;
 const float colorDegrees              = 112.5;
 const float voltageLowerThreshold     = 1.75;
-const float voltageUpperThreshold     = 3.75;
+const float voltageUpperThreshold     = 3.25;
 const float resistor1Value            = 10000.0;
 const float resistor2Value            = 10000.0;
 constexpr float referenceVoltage      = 5.0;
@@ -450,7 +450,6 @@ void handleSosAnimation() {
   }
 }
 
-
 // ------------------------------------------------------------
 // FLASH Mode
 // ------------------------------------------------------------
@@ -479,6 +478,7 @@ void setAllWhite(uint8_t brightness, bool doShow = true, bool setBrightnessFlag 
 
   if (doShow) ledStrip.show();
 }
+
 void showRed() {
   if (ledStripSectors.redCount == 0) return;
   uint8_t first = ledStripSectors.red[0];
