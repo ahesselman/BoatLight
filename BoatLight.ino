@@ -56,6 +56,7 @@ const uint8_t sleepCycles = 7;   // 7 cycles * 8 seconds = 56 seconds total
 const unsigned long saveDelayDuration = 3000;
 const uint8_t initBrightness = 100;
 const uint8_t maxBrightness = 255;
+const uint8_t maxBrightnessWhite = 200;
 const float colorDegrees = 112.5;
 const float voltageLowerThreshold = 1.75;
 const float voltageUpperThreshold = 3.25;
