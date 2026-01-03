@@ -5,27 +5,28 @@
 #include <avr/wdt.h>
 
 #ifdef __AVR__
- #include <avr/power.h>
+#include <avr/power.h>
 #endif
 
 // ------------------------------------------------------------
 // Pin definitions (ATtiny85 internal vs. external pins)
 // ------------------------------------------------------------
-                                    // RST    - pin 1 
-#define LED_POWER_SWITCH_PIN    3   // PB3    - pin 2      
-#define BUTTON_ON_OFF_PIN       4   // PB4    - pin 3 (a on remote)
-                                    // GND    - Pin 4
-#define LED_PIN                 0   // PB0    - pin 5
-#define BUTTON_MODE_PIN         1   // PB1    - pin 6 (b on remote)
-#define VOLTAGE_PIN             A1  // PB2    - pin 7
-                                    // VCC    - pin 8
+// RST    - pin 1
+#define LED_POWER_SWITCH_PIN 3 // PB3    - pin 2
+#define BUTTON_ON_OFF_PIN 4    // PB4    - pin 3 (a on remote)
+                               // GND    - Pin 4
+#define LED_PIN 0              // PB0    - pin 5
+#define BUTTON_MODE_PIN 1      // PB1    - pin 6 (b on remote)
+#define VOLTAGE_PIN A1         // PB2    - pin 7
+                               // VCC    - pin 8
 
 #define SOS_LETTERS 3
 
 // ------------------------------------------------------------
 // Enums
 // ------------------------------------------------------------
-enum LightMode {
+enum LightMode
+{
   GREEN = 0,
   RED,
   GREEN_RED,
@@ -35,11 +36,12 @@ enum LightMode {
   WHITE_ALL,
   SOS,
   FLASH,
-  OFF_MODE,   // <-- always second to last
-  MODE_COUNT  // <-- always last — auto-updates
+  OFF_MODE,  // <-- always second to last
+  MODE_COUNT // <-- always last — auto-updates
 };
 
-enum LedStripWhiteSectorMode {
+enum LedStripWhiteSectorMode
+{
   FRONT = 0,
   BACK
 };
@@ -47,20 +49,20 @@ enum LedStripWhiteSectorMode {
 // ------------------------------------------------------------
 // Constants
 // ------------------------------------------------------------
-const uint8_t numberOfLeds            = 17;
-const uint8_t numberOfModes           = LightMode::MODE_COUNT;
-const byte sleepTime                  = 0b100001; // 8 seconds
-const uint8_t sleepCycles             = 7;        // 7 cycles * 8 seconds = 56 seconds total
+const uint8_t numberOfLeds = 17;
+const uint8_t numberOfModes = LightMode::MODE_COUNT;
+const byte sleepTime = 0b100001; // 8 seconds
+const uint8_t sleepCycles = 7;   // 7 cycles * 8 seconds = 56 seconds total
 const unsigned long saveDelayDuration = 3000;
-const uint8_t initBrightness          = 100;
-const uint8_t maxBrightness           = 255;
-const float colorDegrees              = 112.5;
-const float voltageLowerThreshold     = 1.75;
-const float voltageUpperThreshold     = 3.25;
-const float resistor1Value            = 10000.0;
-const float resistor2Value            = 10000.0;
-constexpr float referenceVoltage      = 5.0;
-constexpr float dividerFactor         = referenceVoltage / 1023.0;
+const uint8_t initBrightness = 100;
+const uint8_t maxBrightness = 255;
+const float colorDegrees = 112.5;
+const float voltageLowerThreshold = 1.75;
+const float voltageUpperThreshold = 3.25;
+const float resistor1Value = 10000.0;
+const float resistor2Value = 10000.0;
+constexpr float referenceVoltage = 5.0;
+constexpr float dividerFactor = referenceVoltage / 1023.0;
 
 /* -- Morse timing constants --
     1. The length of a dot is 1 time unit.
@@ -69,21 +71,22 @@ constexpr float dividerFactor         = referenceVoltage / 1023.0;
     4. The space between letters is 3 time units.
     5. The space between words is 7 time units.
 */
-const uint16_t morseTimeUnit          = 250;
-const uint16_t symbolPauseDuration    = 1 * morseTimeUnit;
-const uint16_t letterPauseDuration    = 3 * morseTimeUnit;
-const uint16_t wordPauseDuration      = 7 * morseTimeUnit;
+const uint16_t morseTimeUnit = 250;
+const uint16_t symbolPauseDuration = 1 * morseTimeUnit;
+const uint16_t letterPauseDuration = 3 * morseTimeUnit;
+const uint16_t wordPauseDuration = 7 * morseTimeUnit;
 
 const uint8_t sosPattern[][4] PROGMEM = {
-  {1,1,1,0}, // S = dot dot dot
-  {3,3,3,0}, // O = dash dash dash
-  {1,1,1,0}  // S = dot dot dot
+    {1, 1, 1, 0}, // S = dot dot dot
+    {3, 3, 3, 0}, // O = dash dash dash
+    {1, 1, 1, 0}  // S = dot dot dot
 };
 
 // ------------------------------------------------------------
 // Data structures
 // ------------------------------------------------------------
-struct LedStripSectors {
+struct LedStripSectors
+{
   uint8_t red[numberOfLeds];
   uint8_t green[numberOfLeds];
   uint8_t whiteBack[numberOfLeds];
@@ -98,21 +101,21 @@ struct LedStripSectors {
 // ------------------------------------------------------------
 // Globals
 // ------------------------------------------------------------
-bool ledsPowered                  = false;
-bool shouldResetStrip             = false;
-bool sosInitialized               = false;
-uint8_t currentMode               = LightMode::OFF_MODE;
-uint8_t lastActiveMode            = LightMode::GREEN;
-unsigned long lastModeChangeTime  = 0;
-unsigned long pressStartTime      = 0;
-uint8_t sosPatternStepIndex       = 0;
-unsigned long sosLastTime         = 0;
+bool ledsPowered = false;
+bool shouldResetStrip = false;
+bool sosInitialized = false;
+uint8_t currentMode = LightMode::OFF_MODE;
+uint8_t lastActiveMode = LightMode::GREEN;
+unsigned long lastModeChangeTime = 0;
+unsigned long pressStartTime = 0;
+uint8_t sosPatternStepIndex = 0;
+unsigned long sosLastTime = 0;
 
 LedStripSectors ledStripSectors;
 
 Adafruit_NeoPixel ledStrip(numberOfLeds, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
-Bounce2::Button modeButton  = Bounce2::Button();
+Bounce2::Button modeButton = Bounce2::Button();
 Bounce2::Button onOffButton = Bounce2::Button();
 
 // ------------------------------------------------------------
@@ -148,7 +151,8 @@ void shutDownWithWD(uint8_t wdt_period);
 // ------------------------------------------------------------
 // Setup
 // ------------------------------------------------------------
-void setup() {
+void setup()
+{
 #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
   clock_prescale_set(clock_div_1);
 #endif
@@ -163,7 +167,8 @@ void setup() {
 // ------------------------------------------------------------
 // Loop
 // ------------------------------------------------------------
-void loop() {
+void loop()
+{
   handleOnOffButtonPress();
   handleModeButtonPress();
   storeCurrentMode();
@@ -173,7 +178,8 @@ void loop() {
 // ------------------------------------------------------------
 // LED Strip Setup and Test
 // ------------------------------------------------------------
-void initializeAndTestLedStrip() {
+void initializeAndTestLedStrip()
+{
   ledStrip.begin();
   ledStrip.clear();
   ledStrip.show();
@@ -183,7 +189,8 @@ void initializeAndTestLedStrip() {
 
   ledStrip.setBrightness(initBrightness);
 
-  for (uint8_t i = 0; i < numberOfLeds; i++) {
+  for (uint8_t i = 0; i < numberOfLeds; i++)
+  {
     ledStrip.clear();
     ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, 255));
     ledStrip.show();
@@ -194,7 +201,8 @@ void initializeAndTestLedStrip() {
 
   delay(200);
 
-  for (uint8_t b = maxBrightness; b > 0; b -= 15) {
+  for (uint8_t b = maxBrightness; b > 0; b -= 15)
+  {
     ledStrip.setBrightness(b);
     ledStrip.show();
     delay(20);
@@ -209,7 +217,8 @@ void initializeAndTestLedStrip() {
 // ------------------------------------------------------------
 // LED Sector Setup
 // ------------------------------------------------------------
-void initializeLedStripSectors() {
+void initializeLedStripSectors()
+{
   ledStripSectors.redCount = 0;
   ledStripSectors.greenCount = 0;
   ledStripSectors.whiteFrontCount = 0;
@@ -218,22 +227,26 @@ void initializeLedStripSectors() {
   float degreesPerLed = 360.0 / numberOfLeds;
   uint8_t numberColoredLeds = round(colorDegrees / degreesPerLed);
 
-  for (uint8_t i = 0; i < numberColoredLeds; i++) {
+  for (uint8_t i = 0; i < numberColoredLeds; i++)
+  {
     ledStripSectors.green[ledStripSectors.greenCount++] = i;
   }
 
-  for (uint8_t i = 0; i < numberColoredLeds; i++) {
+  for (uint8_t i = 0; i < numberColoredLeds; i++)
+  {
     ledStripSectors.red[ledStripSectors.redCount++] = numberColoredLeds + i;
   }
 
   uint8_t numberWhiteLeds = numberOfLeds - (2 * numberColoredLeds);
   uint8_t startIdOfWhiteLed = 2 * numberColoredLeds;
 
-  for (uint8_t i = 0; i < numberWhiteLeds; i++) {
+  for (uint8_t i = 0; i < numberWhiteLeds; i++)
+  {
     ledStripSectors.whiteBack[ledStripSectors.whiteBackCount++] = startIdOfWhiteLed + i;
   }
 
-  for (uint8_t i = 0; i < numberColoredLeds * 2; i++) {
+  for (uint8_t i = 0; i < numberColoredLeds * 2; i++)
+  {
     ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount++] = i;
   }
 }
@@ -241,18 +254,21 @@ void initializeLedStripSectors() {
 // ------------------------------------------------------------
 // Button Setup
 // ------------------------------------------------------------
-void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval = 25) {
-    button.attach(pin, INPUT);
-    button.interval(interval);
-    button.setPressedState(HIGH);
+void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval = 25)
+{
+  button.attach(pin, INPUT);
+  button.interval(interval);
+  button.setPressedState(HIGH);
 }
 
 // ------------------------------------------------------------
 // Fetch Stored Mode
 // ------------------------------------------------------------
-void readAndSanitizeStoredMode() {
+void readAndSanitizeStoredMode()
+{
   uint8_t stored = EEPROM.read(0);
-  if (stored >= numberOfModes) stored = LightMode::GREEN;
+  if (stored >= numberOfModes)
+    stored = LightMode::GREEN;
   currentMode = stored;
   lastActiveMode = stored;
 }
@@ -260,26 +276,36 @@ void readAndSanitizeStoredMode() {
 // ------------------------------------------------------------
 // Button Handling
 // ------------------------------------------------------------
-void handleOnOffButtonPress() {
+void handleOnOffButtonPress()
+{
   onOffButton.update();
-  if (onOffButton.rose()) {
-    if (currentMode != LightMode::OFF_MODE) {
+  if (onOffButton.rose())
+  {
+    if (currentMode != LightMode::OFF_MODE)
+    {
       lastActiveMode = currentMode;
       currentMode = LightMode::OFF_MODE;
-    } else {
+    }
+    else
+    {
       currentMode = lastActiveMode;
     }
     shouldResetStrip = true;
   }
 }
 
-void handleModeButtonPress() {
+void handleModeButtonPress()
+{
   modeButton.update();
-  if (modeButton.rose()) {
-    if (currentMode == LightMode::OFF_MODE) {
+  if (modeButton.rose())
+  {
+    if (currentMode == LightMode::OFF_MODE)
+    {
       lastActiveMode = (lastActiveMode + 1) % (numberOfModes - 1); // skip off mode
       currentMode = lastActiveMode;
-    } else {
+    }
+    else
+    {
       currentMode = (currentMode + 1) % (numberOfModes - 1); // skip off mode
       lastActiveMode = currentMode;
     }
@@ -291,10 +317,12 @@ void handleModeButtonPress() {
 // ------------------------------------------------------------
 // EEPROM Mode Saving
 // ------------------------------------------------------------
-void storeCurrentMode() {
+void storeCurrentMode()
+{
   if (currentMode != LightMode::OFF_MODE &&
       millis() - lastModeChangeTime > saveDelayDuration &&
-      EEPROM.read(0) != currentMode) {
+      EEPROM.read(0) != currentMode)
+  {
     EEPROM.update(0, currentMode);
   }
 }
@@ -302,14 +330,17 @@ void storeCurrentMode() {
 // ------------------------------------------------------------
 // Voltage Reading & Power Control
 // ------------------------------------------------------------
-void performAndHandleVoltageRead() {
+void performAndHandleVoltageRead()
+{
   float solarVoltage = readSolarVoltage();
   handleVoltageState(solarVoltage);
 }
 
-float readSolarVoltage() {
+float readSolarVoltage()
+{
   long sum = 0;
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 10; i++)
+  {
     sum += analogRead(VOLTAGE_PIN);
     delay(2);
   }
@@ -318,29 +349,37 @@ float readSolarVoltage() {
   return voltageAtPin * ((resistor1Value + resistor2Value) / resistor2Value);
 }
 
-void handleVoltageState(float voltage) {
-  if (voltage < voltageLowerThreshold) {
+void handleVoltageState(float voltage)
+{
+  if (voltage < voltageLowerThreshold)
+  {
     handleLowVoltage();
-  } else if (ledsPowered && voltage > voltageUpperThreshold) {
+  }
+  else if (ledsPowered && voltage > voltageUpperThreshold)
+  {
     handleHighVoltage();
   }
 }
 
-void handleLowVoltage() {
-  if (!ledsPowered) {
+void handleLowVoltage()
+{
+  if (!ledsPowered)
+  {
     ledsPowered = true;
     digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
   }
   applyCurrentMode(currentMode);
 }
 
-void handleHighVoltage() {
+void handleHighVoltage()
+{
   ledsPowered = false;
   ledStrip.clear();
   ledStrip.show();
   digitalWrite(LED_POWER_SWITCH_PIN, LOW);
 
-  for (int j = 0; j < sleepCycles; j++) {
+  for (int j = 0; j < sleepCycles; j++)
+  {
     shutDownWithWD(sleepTime);
   }
 }
@@ -348,22 +387,47 @@ void handleHighVoltage() {
 // ------------------------------------------------------------
 // LED Modes
 // ------------------------------------------------------------
-void applyCurrentMode(uint8_t mode) {
+void applyCurrentMode(uint8_t mode)
+{
   if (mode != LightMode::OFF_MODE)
     digitalWrite(LED_POWER_SWITCH_PIN, HIGH);
 
-  switch (mode) {
-    case LightMode::GREEN:       showGreen(); break;
-    case LightMode::RED:         showRed(); break;
-    case LightMode::GREEN_RED:   showGreen(); showRed(); break;
-    case LightMode::WHITE_FRONT: showWhite(FRONT); break;
-    case LightMode::WHITE_BACK:  showWhite(BACK); break;
-    case LightMode::FULL_COMBO:  showGreen(); showRed(); showWhite(BACK); break;
-    case LightMode::WHITE_ALL:   setAllWhite(maxBrightness); break;
-    case LightMode::SOS:         handleSosAnimation(); break;
-    case LightMode::FLASH:       handleFlashMode(); break;
-    case LightMode::OFF_MODE:
-    default:                     handleOffMode(); break;
+  switch (mode)
+  {
+  case LightMode::GREEN:
+    showGreen();
+    break;
+  case LightMode::RED:
+    showRed();
+    break;
+  case LightMode::GREEN_RED:
+    showGreen();
+    showRed();
+    break;
+  case LightMode::WHITE_FRONT:
+    showWhite(FRONT);
+    break;
+  case LightMode::WHITE_BACK:
+    showWhite(BACK);
+    break;
+  case LightMode::FULL_COMBO:
+    showGreen();
+    showRed();
+    showWhite(BACK);
+    break;
+  case LightMode::WHITE_ALL:
+    setAllWhite(maxBrightness);
+    break;
+  case LightMode::SOS:
+    handleSosAnimation();
+    break;
+  case LightMode::FLASH:
+    handleFlashMode();
+    break;
+  case LightMode::OFF_MODE:
+  default:
+    handleOffMode();
+    break;
   }
 
   if (mode != LightMode::SOS && sosInitialized)
@@ -376,21 +440,24 @@ void applyCurrentMode(uint8_t mode) {
 // ------------------------------------------------------------
 // SOS Mode
 // ------------------------------------------------------------
-void handleSosAnimation() {
+void handleSosAnimation()
+{
   static unsigned long lastActionTime = 0;
   static uint8_t letterIndex = 0;
   static uint8_t symbolIndex = 0;
   static bool ledOn = false;
   static uint16_t currentDelay = 0;
 
-  if (currentMode != LightMode::SOS) {
+  if (currentMode != LightMode::SOS)
+  {
     sosInitialized = false;
     return;
   }
 
   unsigned long now = millis();
 
-  if (!sosInitialized) {
+  if (!sosInitialized)
+  {
     sosInitialized = true;
     letterIndex = 0;
     symbolIndex = 0;
@@ -404,18 +471,22 @@ void handleSosAnimation() {
     return;
   }
 
-  if (now - lastActionTime < currentDelay) {
+  if (now - lastActionTime < currentDelay)
+  {
     return;
   }
 
-  if (!ledOn) {
+  if (!ledOn)
+  {
     uint8_t unit = pgm_read_byte(&sosPattern[letterIndex][symbolIndex]);
-    
-    if (unit == 0) {
+
+    if (unit == 0)
+    {
       letterIndex++;
       symbolIndex = 0;
-      
-      if (letterIndex >= SOS_LETTERS) {
+
+      if (letterIndex >= SOS_LETTERS)
+      {
         // end of word; start over after word gap
         letterIndex = 0;
         lastActionTime = now;
@@ -423,7 +494,9 @@ void handleSosAnimation() {
         ledStrip.clear();
         ledStrip.show();
         return;
-      } else {
+      }
+      else
+      {
         // letter gap
         lastActionTime = now;
         currentDelay = letterPauseDuration;
@@ -441,7 +514,8 @@ void handleSosAnimation() {
     return;
   }
 
-  if (ledOn) {
+  if (ledOn)
+  {
     ledStrip.clear();
     ledStrip.show();
     ledOn = false;
@@ -453,77 +527,104 @@ void handleSosAnimation() {
 // ------------------------------------------------------------
 // FLASH Mode
 // ------------------------------------------------------------
-void handleFlashMode() {
+void handleFlashMode()
+{
   static unsigned long lastFlashTime = 0;
   static bool flashOn = false;
   unsigned long now = millis();
 
-  if (now - lastFlashTime >= 500) {
+  if (now - lastFlashTime >= 500)
+  {
     lastFlashTime = now;
     flashOn = !flashOn;
-    if (flashOn) setAllWhite(maxBrightness);
-    else { ledStrip.clear(); ledStrip.show(); }
+    if (flashOn)
+      setAllWhite(maxBrightness);
+    else
+    {
+      ledStrip.clear();
+      ledStrip.show();
+    }
   }
 }
 
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-void setAllWhite(uint8_t brightness, bool doShow = true, bool setBrightnessFlag = true) {
-  if (setBrightnessFlag) ledStrip.setBrightness(brightness);
+void setAllWhite(uint8_t brightness, bool doShow = true, bool setBrightnessFlag = true)
+{
+  if (setBrightnessFlag)
+    ledStrip.setBrightness(brightness);
 
-  for (int i = 0; i < numberOfLeds; i++) {
+  for (int i = 0; i < numberOfLeds; i++)
+  {
     ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, 255));
   }
 
-  if (doShow) ledStrip.show();
+  if (doShow)
+    ledStrip.show();
 }
 
-void showRed() {
-  if (ledStripSectors.redCount == 0) return;
+void showRed()
+{
+  if (ledStripSectors.redCount == 0)
+    return;
   uint8_t first = ledStripSectors.red[0];
-  uint8_t last  = ledStripSectors.red[ledStripSectors.redCount - 1];
-  if (first > last || last >= numberOfLeds) return;
+  uint8_t last = ledStripSectors.red[ledStripSectors.redCount - 1];
+  if (first > last || last >= numberOfLeds)
+    return;
   colorLedsInRange(first, last, 255, 0, 0, 0, shouldResetStrip);
   shouldResetStrip = false;
 }
 
-void showGreen() {
-  if (ledStripSectors.greenCount == 0) return;
+void showGreen()
+{
+  if (ledStripSectors.greenCount == 0)
+    return;
   uint8_t first = ledStripSectors.green[0];
-  uint8_t last  = ledStripSectors.green[ledStripSectors.greenCount - 1];
-  if (first > last || last >= numberOfLeds) return;
+  uint8_t last = ledStripSectors.green[ledStripSectors.greenCount - 1];
+  if (first > last || last >= numberOfLeds)
+    return;
   colorLedsInRange(first, last, 0, 255, 0, 0, shouldResetStrip);
   shouldResetStrip = false;
 }
 
-void showWhite(LedStripWhiteSectorMode mode) {
+void showWhite(LedStripWhiteSectorMode mode)
+{
   uint8_t first = 0, last = 0;
-  if (mode == BACK) {
+  if (mode == BACK)
+  {
     first = ledStripSectors.whiteBack[0];
-    last  = ledStripSectors.whiteBack[ledStripSectors.whiteBackCount - 1];
-  } else {
+    last = ledStripSectors.whiteBack[ledStripSectors.whiteBackCount - 1];
+  }
+  else
+  {
     first = ledStripSectors.whiteFront[0];
-    last  = ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount - 1];
+    last = ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount - 1];
   }
   colorLedsInRange(first, last, 0, 0, 0, 255, shouldResetStrip);
   shouldResetStrip = false;
 }
 
-void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset) {
-  if (start >= numberOfLeds || end >= numberOfLeds) return;
-  if (start > end) return;
+void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset)
+{
+  if (start >= numberOfLeds || end >= numberOfLeds)
+    return;
+  if (start > end)
+    return;
 
-  if (reset) {
+  if (reset)
+  {
     ledStrip.clear();
     ledStrip.setBrightness(maxBrightness);
   }
-  for (int i = start; i <= end; i++) {
+  for (int i = start; i <= end; i++)
+  {
     ledStrip.setPixelColor(i, ledStrip.Color(r, g, b, w));
   }
 }
 
-void handleOffMode() {
+void handleOffMode()
+{
   ledStrip.clear();
   ledStrip.show();
   digitalWrite(LED_POWER_SWITCH_PIN, LOW);
@@ -535,7 +636,8 @@ void handleOffMode() {
 // ------------------------------------------------------------
 ISR(WDT_vect) { wdt_disable(); }
 
-void shutDownWithWD(uint8_t wdt_period) {
+void shutDownWithWD(uint8_t wdt_period)
+{
   noInterrupts();
   wdt_reset();
 
