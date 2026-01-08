@@ -257,6 +257,7 @@ void initializeLedStripSectors()
 void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval)
 {
   button.attach(pin, INPUT);
+  button.setPressedState(HIGH); // TEST IF THIS NEEDS TO BE HIGH OR LOW
   button.interval(interval);
   button.setPressedState(HIGH);
 }
