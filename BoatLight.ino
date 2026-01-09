@@ -54,8 +54,8 @@ const uint8_t numberOfModes = LightMode::MODE_COUNT;
 const byte sleepTime = 0b100001; // 8 seconds
 const uint8_t sleepCycles = 4;   // 4 cycles * 8 seconds = 32 seconds total
 const unsigned long saveDelayDuration = 3000;
-const uint8_t initBrightness = 100;
 const uint8_t maxBrightness = 255;
+const uint8_t maxBrightnessWhite = 165;
 const float colorDegrees = 112.5;
 const float voltageLowerThreshold = 1.75;
 const float voltageUpperThreshold = 3.25;
@@ -187,12 +187,12 @@ void initializeAndTestLedStrip()
   ledStrip.clear();
   ledStrip.show();
 
-  ledStrip.setBrightness(initBrightness);
+  ledStrip.setBrightness(maxBrightness);
 
   for (uint8_t i = 0; i < numberOfLeds; i++)
   {
     ledStrip.clear();
-    ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, 255));
+    ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, maxBrightness));
     ledStrip.show();
     delay(50);
   }
@@ -404,40 +404,40 @@ void applyCurrentMode(uint8_t mode)
 {
   switch (mode)
   {
-  case LightMode::GREEN:
-    showGreen();
-    break;
-  case LightMode::RED:
-    showRed();
-    break;
-  case LightMode::GREEN_RED:
-    showGreen();
-    showRed();
-    break;
-  case LightMode::WHITE_FRONT:
-    showWhite(FRONT);
-    break;
-  case LightMode::WHITE_BACK:
-    showWhite(BACK);
-    break;
-  case LightMode::FULL_COMBO:
-    showGreen();
-    showRed();
-    showWhite(BACK);
-    break;
-  case LightMode::WHITE_ALL:
-    setAllWhite(maxBrightness);
-    break;
-  case LightMode::SOS:
-    handleSosAnimation();
-    break;
-  case LightMode::FLASH:
-    handleFlashMode();
-    break;
-  case LightMode::OFF_MODE:
-  default:
-    handleOffMode();
-    break;
+    case LightMode::GREEN:
+      showGreen();
+      break;
+    case LightMode::RED:
+      showRed();
+      break;
+    case LightMode::GREEN_RED:
+      showGreen();
+      showRed();
+      break;
+    case LightMode::WHITE_FRONT:
+      showWhite(FRONT);
+      break;
+    case LightMode::WHITE_BACK:
+      showWhite(BACK);
+      break;
+    case LightMode::FULL_COMBO:
+      showGreen();
+      showRed();
+      showWhite(BACK);
+      break;
+    case LightMode::WHITE_ALL:
+      setAllWhite(maxBrightnessWhite);
+      break;
+    case LightMode::SOS:
+      handleSosAnimation();
+      break;
+    case LightMode::FLASH:
+      handleFlashMode();
+      break;
+    case LightMode::OFF_MODE:
+    default:
+      handleOffMode();
+      break;
   }
 
   if (mode != LightMode::SOS && sosInitialized)
@@ -611,7 +611,7 @@ void showWhite(LedStripWhiteSectorMode mode)
     first = ledStripSectors.whiteFront[0];
     last = ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount - 1];
   }
-  colorLedsInRange(first, last, 0, 0, 0, 255, shouldResetStrip);
+  colorLedsInRange(first, last, 0, 0, 0, maxBrightnessWhite, shouldResetStrip);
   shouldResetStrip = false;
 }
 
