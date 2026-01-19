@@ -257,7 +257,6 @@ void initializeLedStripSectors()
 void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval)
 {
   button.attach(pin, INPUT);
-  button.setPressedState(HIGH); // TEST IF THIS NEEDS TO BE HIGH OR LOW
   button.interval(interval);
   button.setPressedState(HIGH);
 }
@@ -404,40 +403,40 @@ void applyCurrentMode(uint8_t mode)
 {
   switch (mode)
   {
-    case LightMode::GREEN:
-      showGreen();
-      break;
-    case LightMode::RED:
-      showRed();
-      break;
-    case LightMode::GREEN_RED:
-      showGreen();
-      showRed();
-      break;
-    case LightMode::WHITE_FRONT:
-      showWhite(FRONT);
-      break;
-    case LightMode::WHITE_BACK:
-      showWhite(BACK);
-      break;
-    case LightMode::FULL_COMBO:
-      showGreen();
-      showRed();
-      showWhite(BACK);
-      break;
-    case LightMode::WHITE_ALL:
-      setAllWhite(maxBrightnessWhite);
-      break;
-    case LightMode::SOS:
-      handleSosAnimation();
-      break;
-    case LightMode::FLASH:
-      handleFlashMode();
-      break;
-    case LightMode::OFF_MODE:
-    default:
-      handleOffMode();
-      break;
+  case LightMode::GREEN:
+    showGreen();
+    break;
+  case LightMode::RED:
+    showRed();
+    break;
+  case LightMode::GREEN_RED:
+    showGreen();
+    showRed();
+    break;
+  case LightMode::WHITE_FRONT:
+    showWhite(FRONT);
+    break;
+  case LightMode::WHITE_BACK:
+    showWhite(BACK);
+    break;
+  case LightMode::FULL_COMBO:
+    showGreen();
+    showRed();
+    showWhite(BACK);
+    break;
+  case LightMode::WHITE_ALL:
+    setAllWhite(maxBrightnessWhite);
+    break;
+  case LightMode::SOS:
+    handleSosAnimation();
+    break;
+  case LightMode::FLASH:
+    handleFlashMode();
+    break;
+  case LightMode::OFF_MODE:
+  default:
+    handleOffMode();
+    break;
   }
 
   if (mode != LightMode::SOS && sosInitialized)
