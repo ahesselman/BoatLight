@@ -1,3 +1,4 @@
+// 22-01-2026
 #include <Adafruit_NeoPixel.h>
 #include <Bounce2.h>
 #include <EEPROM.h>
@@ -11,13 +12,14 @@
 // ------------------------------------------------------------
 // Pin definitions (ATtiny85 internal vs. external pins)
 // ------------------------------------------------------------
-//                             RST    - pin 1
-#define BUTTON_SOS_PIN 3    // PB3    - pin 2
-#define BUTTON_ON_OFF_PIN 4 // PB4    - pin 3 (a on remote)
+//
+#define ADC_INPUT A0        // RST    - pin 1 (d on remote)
+#define BUTTON_SOS_PIN 3    // PB3    - pin 2 (c on remote)
+#define BUTTON_ON_OFF_PIN 4 // PB4    - pin 3 (a on remote) \
                             // GND    - Pin 4
 #define LED_PIN 0           // PB0    - pin 5
 #define BUTTON_MODE_PIN 1   // PB1    - pin 6 (b on remote)
-#define VOLTAGE_PIN A1      // PB2    - pin 7
+#define VOLTAGE_PIN A1      // PB2    - pin 7 \
                             // VCC    - pin 8
 
 #define SOS_LETTERS 3
@@ -27,6 +29,7 @@
 // ------------------------------------------------------------
 enum LightMode
 {
+  // Basic modes
   GREEN = 0,
   RED,
   GREEN_RED,
@@ -34,8 +37,22 @@ enum LightMode
   WHITE_BACK,
   FULL_COMBO,
   WHITE_ALL,
-  FLASH,
-  SOS,       // <-- always thrid to last, will only be activated when pressing sos button
+  WHITE_FLASH,
+  // Extra modes (only when enabled)
+  RED_ALL,
+  RED_FLASH,
+  GREEN_ALL,
+  GREEN_FLASH,
+  BLUE_ALL,
+  BLUE_FLASH,
+  YELLOW_ALL,
+  YELLOW_FLASH,
+  MAGENTA_ALL,
+  MAGENTA_FLASH,
+  CYAN_ALL,
+  CYAN_FLASH,
+  // Special modes
+  SOS,       // <-- always third to last, will only be activated when pressing sos button
   OFF_MODE,  // <-- always second to last, will only be activated when pressing on/off button
   MODE_COUNT // <-- always last — auto-updates
 };
@@ -52,13 +69,13 @@ enum LedStripWhiteSectorMode
 const uint8_t numberOfLeds = 17;
 const uint8_t numberOfModes = LightMode::MODE_COUNT;
 const byte sleepTime = 0b100001; // 8 seconds
-const uint8_t sleepCycles = 4;   // 4 cycles * 8 seconds = 32 seconds total
+const uint8_t sleepCycles = 1;   // 1 cycles * 8 seconds = 8 seconds total
 const unsigned long saveDelayDuration = 3000;
 const uint8_t maxBrightness = 255;
-const uint8_t maxBrightnessWhite = 165;
+const uint8_t maxBrightnessWhite = 127;
 const float colorDegrees = 112.5;
-const float voltageLowerThreshold = 1.75;
-const float voltageUpperThreshold = 3.25;
+const float voltageLowerThreshold = 0.75; // was 1.75
+const float voltageUpperThreshold = 1.50; // was 3.25
 const float resistor1Value = 10000.0;
 const float resistor2Value = 10000.0;
 constexpr float referenceVoltage = 5.0;
@@ -89,12 +106,14 @@ struct LedStripSectors
 {
   uint8_t red[numberOfLeds];
   uint8_t green[numberOfLeds];
-  uint8_t whiteBack[numberOfLeds];
+  uint8_t whiteBack1[numberOfLeds];
+  uint8_t whiteBack2[numberOfLeds];
   uint8_t whiteFront[numberOfLeds];
 
   uint8_t redCount;
   uint8_t greenCount;
-  uint8_t whiteBackCount;
+  uint8_t whiteBackCount1;
+  uint8_t whiteBackCount2;
   uint8_t whiteFrontCount;
 };
 
@@ -103,12 +122,15 @@ struct LedStripSectors
 // ------------------------------------------------------------
 bool shouldResetStrip = false;
 bool sosInitialized = false;
+bool extraModesEnabled = false;
 uint8_t currentMode = LightMode::OFF_MODE;
 uint8_t lastActiveMode = LightMode::GREEN;
 unsigned long lastModeChangeTime = 0;
 unsigned long pressStartTime = 0;
 uint8_t sosPatternStepIndex = 0;
 unsigned long sosLastTime = 0;
+uint8_t ledCount = 0;
+float voltageADCReference = 0;
 
 LedStripSectors ledStripSectors;
 
@@ -124,11 +146,13 @@ Bounce2::Button sosButton = Bounce2::Button();
 void initializeAndTestLedStrip();
 void initializeLedStripSectors();
 void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval = 25);
+void initializeExtraModesButton(uint8_t pin);
 void readAndSanitizeStoredMode();
 
 void handleOnOffButtonPress();
 void handleModeButtonPress();
 void handleSosButtonPress();
+void handleExtraModesButtonPress();
 void storeCurrentMode();
 
 float readSolarVoltage();
@@ -136,6 +160,7 @@ void performAndHandleVoltageRead();
 void handleVoltageState(float voltage);
 void handleLowVoltage();
 void handleHighVoltage();
+void handleRunMode(uint8_t r, uint8_t g, uint8_t b, uint8_t w);
 
 void applyCurrentMode(uint8_t mode);
 void showRed();
@@ -143,10 +168,10 @@ void showGreen();
 void showWhite(LedStripWhiteSectorMode mode);
 void colorLedsInRange(uint8_t start, uint8_t end, uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool reset);
 void handleSosAnimation();
-void handleFlashMode();
-void setAllWhite(uint8_t brightness, bool doShow = true, bool setBrightnessFlag = true);
+void handleFlashMode(uint8_t r, uint8_t g, uint8_t b, uint8_t w, uint8_t brightness);
+void setAllPerColor(uint8_t r, uint8_t g, uint8_t b, uint8_t w, uint8_t brightness, bool doShow = true, bool setBrightnessFlag = true);
 void handleOffMode();
-
+void stopExtraModes();
 void shutDownWithWD(uint8_t wdt_period);
 
 // ------------------------------------------------------------
@@ -157,12 +182,14 @@ void setup()
 #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
   clock_prescale_set(clock_div_1);
 #endif
-
   initializeAndTestLedStrip();
   initializeLedStripSectors();
+
   initializeButton(modeButton, BUTTON_MODE_PIN);
   initializeButton(onOffButton, BUTTON_ON_OFF_PIN);
   initializeButton(sosButton, BUTTON_SOS_PIN);
+  initializeExtraModesButton(ADC_INPUT);
+
   readAndSanitizeStoredMode();
 }
 
@@ -171,9 +198,10 @@ void setup()
 // ------------------------------------------------------------
 void loop()
 {
-  handleOnOffButtonPress();
-  handleModeButtonPress();
-  handleSosButtonPress();
+  handleExtraModesButtonPress(); // knob D
+  handleOnOffButtonPress();      // knob A
+  handleModeButtonPress();       // knob B
+  handleSosButtonPress();        // knob C
   storeCurrentMode();
   performAndHandleVoltageRead();
 }
@@ -186,31 +214,14 @@ void initializeAndTestLedStrip()
   ledStrip.begin();
   ledStrip.clear();
   ledStrip.show();
-
   ledStrip.setBrightness(maxBrightness);
 
-  for (uint8_t i = 0; i < numberOfLeds; i++)
-  {
-    ledStrip.clear();
-    ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, maxBrightness));
-    ledStrip.show();
-    delay(50);
-  }
-
-  setAllWhite(maxBrightness);
-
-  delay(200);
-
-  for (uint8_t b = maxBrightness; b > 0; b -= 15)
-  {
-    ledStrip.setBrightness(b);
-    ledStrip.show();
-    delay(20);
-  }
+  ledStrip.clear();
+  while (ledCount < numberOfLeds)
+    handleRunMode(0, 0, 0, maxBrightness);
 
   ledStrip.clear();
   ledStrip.show();
-
   ledStrip.setBrightness(maxBrightness);
 }
 
@@ -222,32 +233,38 @@ void initializeLedStripSectors()
   ledStripSectors.redCount = 0;
   ledStripSectors.greenCount = 0;
   ledStripSectors.whiteFrontCount = 0;
-  ledStripSectors.whiteBackCount = 0;
+  ledStripSectors.whiteBackCount1 = 0;
+  ledStripSectors.whiteBackCount2 = 0;
 
   float degreesPerLed = 360.0 / numberOfLeds;
   uint8_t numberColoredLeds = round(colorDegrees / degreesPerLed);
-
-  for (uint8_t i = 0; i < numberColoredLeds; i++)
-  {
-    ledStripSectors.green[ledStripSectors.greenCount++] = i;
-  }
-
-  for (uint8_t i = 0; i < numberColoredLeds; i++)
-  {
-    ledStripSectors.red[ledStripSectors.redCount++] = numberColoredLeds + i;
-  }
-
   uint8_t numberWhiteLeds = numberOfLeds - (2 * numberColoredLeds);
-  uint8_t startIdOfWhiteLed = 2 * numberColoredLeds;
+  uint8_t numberWhiteLedsBack1 = numberWhiteLeds / 2;
+  uint8_t numberWhiteLedsBack2 = numberWhiteLeds - numberWhiteLedsBack1;
 
-  for (uint8_t i = 0; i < numberWhiteLeds; i++)
+  for (uint8_t i = 0; i < numberWhiteLedsBack1; i++)
   {
-    ledStripSectors.whiteBack[ledStripSectors.whiteBackCount++] = startIdOfWhiteLed + i;
+    ledStripSectors.whiteBack1[ledStripSectors.whiteBackCount1++] = i;
+  }
+
+  for (uint8_t i = 0; i < numberColoredLeds; i++)
+  {
+    ledStripSectors.green[ledStripSectors.greenCount++] = numberWhiteLedsBack1 + i;
+  }
+
+  for (uint8_t i = 0; i < numberColoredLeds; i++)
+  {
+    ledStripSectors.red[ledStripSectors.redCount++] = numberColoredLeds + numberWhiteLedsBack1 + i;
+  }
+
+  for (uint8_t i = 0; i < numberWhiteLedsBack2; i++)
+  {
+    ledStripSectors.whiteBack2[ledStripSectors.whiteBackCount2++] = (2 * numberColoredLeds) + numberWhiteLedsBack1 + i;
   }
 
   for (uint8_t i = 0; i < numberColoredLeds * 2; i++)
   {
-    ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount++] = i;
+    ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount++] = numberWhiteLedsBack1 + i;
   }
 }
 
@@ -261,6 +278,12 @@ void initializeButton(Bounce2::Button &button, uint8_t pin, uint16_t interval)
   button.setPressedState(HIGH);
 }
 
+void initializeExtraModesButton(uint8_t pin)
+{
+  pinMode(pin, INPUT);
+  voltageADCReference = analogRead(pin);
+}
+
 // ------------------------------------------------------------
 // Fetch Stored Mode
 // ------------------------------------------------------------
@@ -271,11 +294,32 @@ void readAndSanitizeStoredMode()
     stored = LightMode::GREEN;
   currentMode = stored;
   lastActiveMode = stored;
+  extraModesEnabled = (lastActiveMode > LightMode::WHITE_FLASH);
 }
 
 // ------------------------------------------------------------
 // Button Handling
 // ------------------------------------------------------------
+
+void handleExtraModesButtonPress()
+{
+  static bool pressed = false;
+
+  float adc = analogRead(ADC_INPUT);
+  bool isHigh = adc > (voltageADCReference + 100);
+
+  if (isHigh && !pressed)
+  {
+    extraModesEnabled = !extraModesEnabled;
+    pressed = true;
+  }
+
+  if (!isHigh && pressed)
+  {
+    voltageADCReference = analogRead(ADC_INPUT);
+    pressed = false;
+  }
+}
 
 void handleOnOffButtonPress()
 {
@@ -338,9 +382,7 @@ void handleSosButtonPress()
 // ------------------------------------------------------------
 void storeCurrentMode()
 {
-  if (currentMode != LightMode::OFF_MODE &&
-      millis() - lastModeChangeTime > saveDelayDuration &&
-      EEPROM.read(0) != currentMode)
+  if (currentMode != LightMode::OFF_MODE && millis() - lastModeChangeTime > saveDelayDuration && EEPROM.read(0) != currentMode)
   {
     EEPROM.update(0, currentMode);
   }
@@ -365,7 +407,7 @@ float readSolarVoltage()
   }
   float avg = sum / 10.0;
   float voltageAtPin = avg * dividerFactor;
-  return voltageAtPin * ((resistor1Value + resistor2Value) / resistor2Value);
+  return voltageAtPin * ((resistor1Value + resistor2Value) / resistor2Value); // voltage correction due to voltage divider 10K | 10K
 }
 
 void handleVoltageState(float voltage)
@@ -425,13 +467,85 @@ void applyCurrentMode(uint8_t mode)
     showWhite(BACK);
     break;
   case LightMode::WHITE_ALL:
-    setAllWhite(maxBrightnessWhite);
+    setAllPerColor(0, 0, 0, maxBrightnessWhite, maxBrightness, true, true);
+    break;
+  case LightMode::WHITE_FLASH:
+    handleFlashMode(0, 0, 0, maxBrightness, maxBrightness);
+    break;
+  case LightMode::RED_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(maxBrightness, 0, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::RED_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(maxBrightness, 0, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::GREEN_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(0, maxBrightness, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::GREEN_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(0, maxBrightness, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::BLUE_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(0, 0, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::BLUE_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(0, 0, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::YELLOW_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(maxBrightness, maxBrightness, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::YELLOW_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(maxBrightness, maxBrightness, 0, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::MAGENTA_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(maxBrightness, 0, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::MAGENTA_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(maxBrightness, 0, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::CYAN_ALL:
+    if (extraModesEnabled)
+      setAllPerColor(0, maxBrightness, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
+    break;
+  case LightMode::CYAN_FLASH:
+    if (extraModesEnabled)
+      handleFlashMode(0, maxBrightness, maxBrightness, 0, maxBrightness);
+    else
+      stopExtraModes();
     break;
   case LightMode::SOS:
     handleSosAnimation();
-    break;
-  case LightMode::FLASH:
-    handleFlashMode();
     break;
   case LightMode::OFF_MODE:
   default:
@@ -442,8 +556,14 @@ void applyCurrentMode(uint8_t mode)
   if (mode != LightMode::SOS && sosInitialized)
     sosInitialized = false;
 
-  if (mode != LightMode::SOS && mode != LightMode::FLASH)
+  if (mode != LightMode::SOS && mode != LightMode::WHITE_FLASH)
     ledStrip.show();
+}
+
+void stopExtraModes()
+{
+  currentMode = LightMode::GREEN;
+  lastActiveMode = currentMode;
 }
 
 // ------------------------------------------------------------
@@ -515,7 +635,7 @@ void handleSosAnimation()
       }
     }
 
-    setAllWhite(maxBrightness, true, false);
+    setAllPerColor(0, 0, 0, maxBrightness, maxBrightness, true, false);
     ledOn = true;
     lastActionTime = now;
     currentDelay = (uint16_t)unit * morseTimeUnit;
@@ -536,18 +656,17 @@ void handleSosAnimation()
 // ------------------------------------------------------------
 // FLASH Mode
 // ------------------------------------------------------------
-void handleFlashMode()
+void handleFlashMode(uint8_t r, uint8_t g, uint8_t b, uint8_t w, uint8_t maxbrightness)
 {
   static unsigned long lastFlashTime = 0;
   static bool flashOn = false;
   unsigned long now = millis();
-
   if (now - lastFlashTime >= 500)
   {
     lastFlashTime = now;
     flashOn = !flashOn;
     if (flashOn)
-      setAllWhite(maxBrightness);
+      setAllPerColor(r, g, b, w, maxBrightness);
     else
     {
       ledStrip.clear();
@@ -559,18 +678,35 @@ void handleFlashMode()
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-void setAllWhite(uint8_t brightness, bool doShow, bool setBrightnessFlag)
+
+void setAllPerColor(uint8_t r, uint8_t g, uint8_t b, uint8_t w, uint8_t brightness, bool doShow, bool setBrightnessFlag)
 {
   if (setBrightnessFlag)
     ledStrip.setBrightness(brightness);
-
   for (int i = 0; i < numberOfLeds; i++)
-  {
-    ledStrip.setPixelColor(i, ledStrip.Color(0, 0, 0, 255));
-  }
-
+    ledStrip.setPixelColor(i, ledStrip.Color(r, g, b, w));
   if (doShow)
     ledStrip.show();
+}
+
+void handleRunMode(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
+{
+  static unsigned long lastRunTime = 0;
+  unsigned long now = millis();
+  if (now - lastRunTime >= 59)
+  {
+    lastRunTime = now;
+    ledStrip.clear();
+    ledStrip.setPixelColor(ledCount, ledStrip.Color(r, g, b, w));
+    ledStrip.show();
+
+    ledCount++;
+    if (ledCount >= numberOfLeds)
+    {
+      ledCount = 0;
+      lastRunTime = 0;
+    }
+  }
 }
 
 void showRed()
@@ -581,7 +717,7 @@ void showRed()
   uint8_t last = ledStripSectors.red[ledStripSectors.redCount - 1];
   if (first > last || last >= numberOfLeds)
     return;
-  colorLedsInRange(first, last, 255, 0, 0, 0, shouldResetStrip);
+  colorLedsInRange(first, last, maxBrightness, 0, 0, 0, shouldResetStrip);
   shouldResetStrip = false;
 }
 
@@ -593,7 +729,7 @@ void showGreen()
   uint8_t last = ledStripSectors.green[ledStripSectors.greenCount - 1];
   if (first > last || last >= numberOfLeds)
     return;
-  colorLedsInRange(first, last, 0, 255, 0, 0, shouldResetStrip);
+  colorLedsInRange(first, last, 0, maxBrightness, 0, 0, shouldResetStrip);
   shouldResetStrip = false;
 }
 
@@ -602,15 +738,20 @@ void showWhite(LedStripWhiteSectorMode mode)
   uint8_t first = 0, last = 0;
   if (mode == BACK)
   {
-    first = ledStripSectors.whiteBack[0];
-    last = ledStripSectors.whiteBack[ledStripSectors.whiteBackCount - 1];
+    first = ledStripSectors.whiteBack1[0];
+    last = ledStripSectors.whiteBack1[ledStripSectors.whiteBackCount1 - 1];
+    colorLedsInRange(first, last, 0, 0, 0, maxBrightnessWhite, shouldResetStrip);
+    first = ledStripSectors.whiteBack2[0];
+    last = ledStripSectors.whiteBack2[ledStripSectors.whiteBackCount2 - 1];
+    colorLedsInRange(first, last, 0, 0, 0, maxBrightnessWhite, shouldResetStrip);
   }
   else
   {
     first = ledStripSectors.whiteFront[0];
     last = ledStripSectors.whiteFront[ledStripSectors.whiteFrontCount - 1];
+    colorLedsInRange(first, last, 0, 0, 0, maxBrightnessWhite, shouldResetStrip);
   }
-  colorLedsInRange(first, last, 0, 0, 0, maxBrightnessWhite, shouldResetStrip);
+
   shouldResetStrip = false;
 }
 
@@ -641,7 +782,10 @@ void handleOffMode()
 // ------------------------------------------------------------
 // Watchdog Sleep
 // ------------------------------------------------------------
-ISR(WDT_vect) { wdt_disable(); }
+ISR(WDT_vect)
+{
+  wdt_disable();
+}
 
 void shutDownWithWD(uint8_t wdt_period)
 {
